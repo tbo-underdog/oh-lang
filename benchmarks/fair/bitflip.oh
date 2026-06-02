@@ -1,0 +1,11 @@
+#flipbits(x)~x
+#popcnt_loop(x){
+c:=0
+@b,32{
+m:=1<<b
+?(x&m)==m{c=c+1}}
+c}
+#main(){
+r:=0
+@i,50000000{r=r+popcnt_loop(i)+popcnt_loop(flipbits(i))}
+r&255}

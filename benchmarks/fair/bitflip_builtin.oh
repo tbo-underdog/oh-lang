@@ -1,0 +1,4 @@
+#main(){
+r:=0
+@i,50000000{r=r+popcount(i)+popcount(~i)}
+r&255}

@@ -21,6 +21,7 @@ cheaper in tokens, but C is faster on several and we say so.
 | fibonacci | 8.77 | 4.52 | 1.94× | C faster |
 | max_array | 0.122 | 0.028 | 4.32× | C faster |
 | bitflip (hand-rolled popcount) | 0.157 | 0.108 | 1.45× | C faster |
+| bitflip (`popcount()` builtin) | 0.0011 | 0.0025 | **0.45×** | **OH faster** |
 
 ## Speed — standard library vs libc
 
