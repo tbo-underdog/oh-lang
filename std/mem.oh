@@ -1,0 +1,15 @@
+// mem: mmap-backed bump heap. No globals — caller holds a 3-word state
+// array [base, used, cap] (declare `h:[3]6`, pass `h`). Pointers are i64
+// addresses; cast the result, e.g. p:=(*3)halloc(h,40) for an i32 region.
+// mmap syscall=9 (remapped per-arch): mmap(0,bytes,PROT_RW=3,MAP_PRIV|ANON=34,-1,0)
+#heap_new(h:*6,bytes:6):v{
+b:=sys(9,0,bytes,3,34,-1,0)
+h[0]=b
+h[1]=0
+h[2]=bytes}
+#halloc(h:*6,n:6):6{
+a:=(h[1]+7)/8*8
+p:=h[0]+a
+h[1]=a+n
+p}
+#hused(h:*6):6 h[1]

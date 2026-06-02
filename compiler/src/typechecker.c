@@ -242,6 +242,9 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
         for (size_t i = 0; i < e->call.argc; i++) {
             Type *at = infer(e->call.args[i], ss, a);
             Type *pt = sig->param_types[i];
+            // int literal argument adopts the parameter's int type
+            if (is_int_kind(pt->kind) && relit(e->call.args[i], pt->kind, a))
+                at = e->call.args[i]->typ;
             // Allow array-to-pointer decay: [N]T -> ^T
             bool compat = types_equal(at, pt);
             if (!compat && at->kind == TY_ARRAY && pt->kind == TY_PTR) {
