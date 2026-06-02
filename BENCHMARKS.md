@@ -86,4 +86,4 @@ store-forwarding, not a quick fix). If your priority is minimum token/compute co
 with C-class (and often better) performance, that trade is favorable. If you need
 to win every micro-benchmark, it does not — and we will not claim it does.
 
-*Reproduce:* sources in `benchmarks/`; build both, run fold-proof loops, compare.
+*Reproduce:* sources in `benchmarks/fair/` (one .oh + .c per benchmark); build both with the commands above, run fold-proof loops, compare.

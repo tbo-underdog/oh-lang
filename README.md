@@ -74,8 +74,26 @@ function fib(n: i32) -> i32 {
 }
 ```
 
-The full syntax reference for AI agents is in [SPEC.md](SPEC.md) — load that to
-generate or read Overhaul at a high level.
+## Teaching an AI to write Overhaul
+
+The entire language is specified for AI consumption in one file: [SPEC.md](SPEC.md).
+To make any capable coding model fluent in Overhaul, load that spec into its
+context. The simplest command:
+
+```sh
+cat SPEC.md          # pipe/paste this into your AI's context
+```
+
+Ready-to-paste instruction for an agent:
+
+> Read `SPEC.md` in full — it is the complete Overhaul language reference. From
+> now on, write all code in Overhaul according to that spec. Compile with
+> `./compiler/overhaul <files...> -o out`, prove correctness with
+> `./run_tests.sh`, and when a human needs to read your code, decode it with
+> `./translator/ohtranslate <file.oh>`.
+
+That single file is enough for an AI to read and write Overhaul at a high level —
+no fine-tuning or examples beyond the spec are required.
 
 ## The AI development workflow
 
