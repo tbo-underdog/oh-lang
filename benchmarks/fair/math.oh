@@ -1,0 +1,6 @@
+#ipow(base,exp){r:=1 @i,exp{r=r*base} r}
+#isqrt(n){r:=0 ~(r+1)*(r+1)<=n{r=r+1} r}
+#main(){
+r:=0
+@i,5000000{r=r+ipow(i&7,3)+isqrt(i&1023)}
+r&255}

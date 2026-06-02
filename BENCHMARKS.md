@@ -87,3 +87,22 @@ with C-class (and often better) performance, that trade is favorable. If you nee
 to win every micro-benchmark, it does not — and we will not claim it does.
 
 *Reproduce:* sources in `benchmarks/fair/` (one .oh + .c per benchmark); build both with the commands above, run fold-proof loops, compare.
+
+## V2 stdlib data structures vs hand-written C (fold-proof)
+
+Equivalent C = the same algorithm written by hand with libc `malloc`/`realloc`
+(not C++ STL). OH/C < 1.0 = Overhaul faster.
+
+| benchmark | OH/C | result |
+|---|---|---|
+| math (ipow/isqrt loop) | 1.24× | C faster |
+| vec (1M push w/ growth + sum) | 1.66× | C faster |
+| map (1M int→int set + get) | 0.95× | ~tie |
+
+Honest read: the data-structure stdlib is **competitive but not beating C**. The
+`vec` gap is the allocator: our `halloc` bump-allocator **copies on every grow and
+never frees**, while C's `realloc` grows in place. A grow-last-allocation-in-place
+`halloc` would close most of it. `map` is at parity (same open-addressing algorithm,
+inlined). These are small absolute times (1–26 ms) so ratios are noise-sensitive.
+
+Reproduce: `benchmarks/fair/{math,vec,map}.{oh,c}`.
