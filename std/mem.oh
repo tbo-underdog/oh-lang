@@ -1,7 +1,5 @@
-// mem: mmap-backed bump heap. No globals — caller holds a 3-word state
-// array [base, used, cap] (declare `h:[3]6`, pass `h`). Pointers are i64
-// addresses; cast the result, e.g. p:=(*3)halloc(h,40) for an i32 region.
-// mmap syscall=9 (remapped per-arch): mmap(0,bytes,PROT_RW=3,MAP_PRIV|ANON=34,-1,0)
+// mem: mmap-backed bump heap. No globals — caller holds [base,used,cap] in `h:[3]6`.
+// halloc bump-allocates 8-aligned, returns an i64 address to cast.
 #heap_new(h:*6,bytes:6):v{
 b:=sys(9,0,bytes,3,34,-1,0)
 h[0]=b
@@ -12,4 +10,16 @@ a:=(h[1]+7)/8*8
 p:=h[0]+a
 h[1]=a+n
 p}
+// hrealloc: if p is the most-recent allocation (p+oldn == base+used), extend it
+// in place (O(1), no copy) — this makes vec/buf growth amortized O(1) like C
+// realloc. Otherwise allocate fresh and copy oldn bytes.
+#hrealloc(h:*6,p:6,oldn:6,newn:6):6{
+?p+oldn==h[0]+h[1]{
+h[1]=h[1]+(newn-oldn)
+\p}
+np:=halloc(h,newn)
+src:=(*1)p
+dst:=(*1)np
+@i,(3)oldn{dst[i]=src[i]}
+np}
 #hused(h:*6):6 h[1]

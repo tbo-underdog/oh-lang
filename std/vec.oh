@@ -1,5 +1,4 @@
-// vec: growable i32 array on a heap. State v:[3]6 = [dataptr, len, cap].
-// Needs std/mem. Pointers are i64 addrs; explicit casts bridge i64<->i32.
+// vec: growable i32 array on a heap (needs std/mem). State v:[3]6 = [data,len,cap].
 #vec_new(v:*6,h:*6,cap):v{
 v[0]=halloc(h,(6)(cap*4))
 v[1]=0
@@ -7,11 +6,7 @@ v[2]=(6)cap}
 #vec_push(v:*6,h:*6,x):v{
 ?v[1]>=v[2]{
 nc:=v[2]*2
-nd:=halloc(h,(6)(nc*4))
-old:=(*3)v[0]
-nw:=(*3)nd
-@i,(3)v[1]{nw[i]=old[i]}
-v[0]=nd
+v[0]=hrealloc(h,v[0],v[2]*4,nc*4)
 v[2]=nc}
 d:=(*3)v[0]
 li:=(3)v[1]

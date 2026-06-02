@@ -95,9 +95,11 @@ Equivalent C = the same algorithm written by hand with libc `malloc`/`realloc`
 
 | benchmark | OH/C | result |
 |---|---|---|
-| math (ipow/isqrt loop) | 1.24× | C faster |
-| vec (1M push w/ growth + sum) | 1.66× | C faster |
+| vec (1M push w/ growth + sum) | 0.87× | **OH faster** |
+| json (2M field extractions) | 0.05× | **OH faster** |
 | map (1M int→int set + get) | 0.95× | ~tie |
+| math (ipow/isqrt loop) | 1.24× | C faster |
+| buf (5M int appends) | 1.76× | C faster |
 
 Honest read: the data-structure stdlib is **competitive but not beating C**. The
 `vec` gap is the allocator: our `halloc` bump-allocator **copies on every grow and
@@ -105,4 +107,4 @@ never frees**, while C's `realloc` grows in place. A grow-last-allocation-in-pla
 `halloc` would close most of it. `map` is at parity (same open-addressing algorithm,
 inlined). These are small absolute times (1–26 ms) so ratios are noise-sensitive.
 
-Reproduce: `benchmarks/fair/{math,vec,map}.{oh,c}`.
+Reproduce: `benchmarks/fair/{math,vec,map,buf,json}.{oh,c}` (OH benchmarks compile the shipped std/ modules).

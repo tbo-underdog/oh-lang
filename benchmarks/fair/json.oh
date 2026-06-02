@@ -1,0 +1,5 @@
+#main(){
+j:="{\"a\":1,\"port\":8080,\"timeout\":250,\"retries\":3}"
+r:=0
+@i,2000000{r=r+json_int(j,"port")+json_int(j,"timeout")}
+r&255}
