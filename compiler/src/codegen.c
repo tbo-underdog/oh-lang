@@ -18,6 +18,10 @@ static FILE *out;
 
 /* Active target arch, set by codegen(). Drives per-arch syscall lowering. */
 static TargetTriple g_target;
+
+/* Set transiently when emitting a call that is the direct value of a return
+ * (tail position). Consumed (and cleared) at the top of EX_CALL. */
+static int g_tail;
 static int target_is_aarch64(void) {
     return g_target == TARGET_AARCH64_LINUX || g_target == TARGET_AARCH64_MACOS;
 }
@@ -896,6 +900,12 @@ static int emit_expr(Expr *e) {
     }
 
     case EX_CALL: {
+        /* Capture tail-position flag BEFORE evaluating args (nested calls in
+         * args are not in tail position). A `tail` hint lets LLVM's
+         * TailCallElim turn self-tail-recursion into a loop — no stack growth,
+         * no overflow on deep recursion, and faster. */
+        int is_tail = g_tail; g_tail = 0;
+
         /* Evaluate all arguments */
         int arg_regs[64];
         assert(e->call.argc <= 64);
@@ -996,10 +1006,21 @@ static int emit_expr(Expr *e) {
         /* All callees are internal fastcc functions (whole-program); the cc
          * must match the definition. fastcc enables clang's tail-call /
          * recursion-to-iteration transforms. */
+        /* A `tail` call must NOT reference the caller's stack frame. If any
+         * argument is a pointer/array, it may point into the caller's locals
+         * (e.g. maxarr(arr,5) with a local arr) — tearing the frame down would
+         * dangle it. Only tail-call when all args are scalar values. */
+        if (is_tail) {
+            for (size_t i = 0; i < e->call.argc; i++) {
+                TypeKind ak = e->call.args[i]->typ->kind;
+                if (ak == TY_PTR || ak == TY_ARRAY) { is_tail = 0; break; }
+            }
+        }
+        const char *tailkw = is_tail ? "tail " : "";
         if (rk != TY_VOID)
-            fprintf(out, "  %%t%d = call fastcc %s @%s(", r, llvm_scalar(rk), e->call.name);
+            fprintf(out, "  %%t%d = %scall fastcc %s @%s(", r, tailkw, llvm_scalar(rk), e->call.name);
         else
-            fprintf(out, "  call fastcc void @%s(", e->call.name);
+            fprintf(out, "  %scall fastcc void @%s(", tailkw, e->call.name);
 
         for (size_t i = 0; i < e->call.argc; i++) {
             if (i > 0) fprintf(out, ", ");
@@ -1303,6 +1324,7 @@ static void emit_stmt(Stmt *s) {
             int ci1 = ensure_i1(cr, rv->ternary.cond->typ->kind);
             if (IS_CONST(ci1)) {
                 Expr *taken = const_table[CONST_IDX(ci1)].ival ? rv->ternary.then_e : rv->ternary.else_e;
+                g_tail = (taken->kind == EX_CALL);
                 int t = emit_expr(taken);
                 fprintf(out, "  ret %s ", llvm_scalar(taken->typ->kind)); emit_ref(t); fprintf(out,"\n");
                 break;
@@ -1310,13 +1332,16 @@ static void emit_stmt(Stmt *s) {
             int lt = new_label(), le = new_label();
             fprintf(out, "  br i1 %%t%d, label %%L%d, label %%L%d\n", ci1, lt, le);
             fprintf(out, "L%d:\n", lt);
+            g_tail = (rv->ternary.then_e->kind == EX_CALL);
             int tr = emit_expr(rv->ternary.then_e);
             fprintf(out, "  ret %s ", llvm_scalar(rv->ternary.then_e->typ->kind)); emit_ref(tr); fprintf(out,"\n");
             fprintf(out, "L%d:\n", le);
+            g_tail = (rv->ternary.else_e->kind == EX_CALL);
             int er = emit_expr(rv->ternary.else_e);
             fprintf(out, "  ret %s ", llvm_scalar(rv->ternary.else_e->typ->kind)); emit_ref(er); fprintf(out,"\n");
             break;
         }
+        g_tail = (rv->kind == EX_CALL);   /* tail call if return value is a direct call */
         int r = emit_expr(rv);
         fprintf(out, "  ret %s ", llvm_scalar(rv->typ->kind));
         emit_ref(r); fprintf(out, "\n");

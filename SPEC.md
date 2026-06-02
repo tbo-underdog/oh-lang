@@ -92,6 +92,10 @@ s}
   ```
 - **While loop** (`~`): `~cond{ ... }`
 - Loop variables follow block scope; you may reuse `i`/`j`/`v` in nested loops.
+- **Tail recursion is optimized**: a self-call in tail position (the direct
+  return value, incl. a ternary arm) with scalar arguments is compiled to a
+  loop — no stack growth, safe to recurse millions deep. Prefer tail/accumulator
+  recursion for depth. (Tree recursion like naive `fib` is not loop-converted.)
 
 > **GOTCHA — one statement per line.** A statement whose value is an expression,
 > immediately followed by `?` on the **same line**, is misparsed as a ternary.

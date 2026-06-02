@@ -1,0 +1,4 @@
+// deep tail recursion (50M) — only completes if TCO turns it into a loop;
+// without TCO this overflows the stack. count(50000000,0)&255 == 128.
+#count(n,acc)n==0?acc:count(n-1,acc+1)
+#main()count(50000000,0)&255
