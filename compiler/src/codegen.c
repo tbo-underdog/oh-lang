@@ -16,6 +16,38 @@
 
 static FILE *out;
 
+/* Active target arch, set by codegen(). Drives per-arch syscall lowering. */
+static TargetTriple g_target;
+static int target_is_aarch64(void) {
+    return g_target == TARGET_AARCH64_LINUX || g_target == TARGET_AARCH64_MACOS;
+}
+
+/* Overhaul's syscall ABI is "Linux x86-64 numbers". For other targets the
+ * codegen remaps a constant syscall number to that target's number, so .oh
+ * source stays portable and token-identical across arches. Linux x86-64 ->
+ * Linux aarch64 mapping for the calls our programs/stdlib use. */
+static long remap_syscall_x86_to_arm64(long n) {
+    switch (n) {
+    case 0:  return 63;   /* read */
+    case 1:  return 64;   /* write */
+    case 2:  return 1024; /* open -> openat-ish; rarely used, placeholder */
+    case 3:  return 57;   /* close */
+    case 9:  return 222;  /* mmap */
+    case 11: return 215;  /* munmap */
+    case 35: return 101;  /* nanosleep */
+    case 41: return 198;  /* socket */
+    case 42: return 203;  /* connect */
+    case 43: return 202;  /* accept */
+    case 44: return 206;  /* sendto */
+    case 45: return 207;  /* recvfrom */
+    case 49: return 200;  /* bind */
+    case 50: return 201;  /* listen */
+    case 54: return 208;  /* setsockopt */
+    case 60: return 93;   /* exit */
+    default: return n;    /* assume same (read/write family already differ above) */
+    }
+}
+
 /* SSA register counter – each new value gets a unique number */
 static int reg_ctr;
 
@@ -870,12 +902,26 @@ static int emit_expr(Expr *e) {
         for (size_t i = 0; i < e->call.argc; i++)
             arg_regs[i] = emit_expr(e->call.args[i]);
 
-        /* `sys` builtin → x86-64 syscall via inline asm.
-         * sys(num, a1..a6); each arg widened to i64 (sext ints / ptrtoint
-         * pointers); returns i64 in rax. Clobbers rcx, r11, memory. */
+        /* `sys` builtin → native syscall via per-arch inline asm.
+         * sys(num, a1..a6); each arg widened to i64. Source uses Linux x86-64
+         * syscall numbers (Overhaul's ABI); the number is remapped per target.
+         *   x86-64:  `syscall`  num=rax args=rdi,rsi,rdx,r10,r8,r9  ret=rax
+         *   aarch64: `svc #0`   num=x8  args=x0,x1,x2,x3,x4,x5      ret=x0  */
         if (strcmp(e->call.name, "sys") == 0) {
-            const char *regs[7] = {"{ax}","{di}","{si}","{dx}","{r10}","{r8}","{r9}"};
+            int arm = target_is_aarch64();
+            /* arg-register constraints. x86: first slot is the number in rax
+             * AND the return in rax. arm: number is a separate x8 input, args
+             * x0..x5, return x0. */
+            const char *x86regs[7]  = {"{ax}","{di}","{si}","{dx}","{r10}","{r8}","{r9}"};
+            const char *armargs[6]  = {"{x0}","{x1}","{x2}","{x3}","{x4}","{x5}"};
             size_t n = e->call.argc; if (n > 7) n = 7;
+
+            /* Remap a constant syscall number to the target's ABI. */
+            if (arm && n >= 1 && IS_CONST(arg_regs[0])) {
+                long mapped = remap_syscall_x86_to_arm64(const_table[CONST_IDX(arg_regs[0])].ival);
+                arg_regs[0] = new_iconst(mapped);
+            }
+
             /* widen each arg to i64 */
             int wide[7];
             for (size_t i = 0; i < n; i++) {
@@ -893,9 +939,21 @@ static int emit_expr(Expr *e) {
                 wide[i] = w;
             }
             int r2 = new_reg();
-            /* build constraint string: "={ax},{ax},{di},..." for n args */
+            if (arm) {
+                /* aarch64: x8=number, x0..x5=args, result in x0 */
+                fprintf(out, "  %%t%d = call i64 asm sideeffect \"svc #0\", \"={x0},{x8}", r2);
+                size_t nargs = n > 0 ? n - 1 : 0;            /* args after the number */
+                for (size_t i = 0; i < nargs && i < 6; i++) fprintf(out, ",%s", armargs[i]);
+                fprintf(out, ",~{memory}\"(");
+                /* operand order: number first (x8), then args (x0..) */
+                fprintf(out, "i64 %%t%d", wide[0]);
+                for (size_t i = 1; i < n; i++) fprintf(out, ", i64 %%t%d", wide[i]);
+                fprintf(out, ")\n");
+                return r2;
+            }
+            /* x86-64: rax=number+return, rdi,rsi,... = args */
             fprintf(out, "  %%t%d = call i64 asm sideeffect \"syscall\", \"={ax}", r2);
-            for (size_t i = 0; i < n; i++) fprintf(out, ",%s", regs[i]);
+            for (size_t i = 0; i < n; i++) fprintf(out, ",%s", x86regs[i]);
             fprintf(out, ",~{rcx},~{r11},~{memory}\"(");
             for (size_t i = 0; i < n; i++) {
                 if (i) fprintf(out, ", ");
@@ -1612,6 +1670,7 @@ void codegen(Program *prog, const char *out_ll_path, TargetTriple target) {
         exit(1);
     }
 
+    g_target = target;
     lbl_ctr = 0;
     str_count = 0; /* reset string table for this compilation unit */
     compute_purity(prog);      /* interprocedural purity for memory(none) */
