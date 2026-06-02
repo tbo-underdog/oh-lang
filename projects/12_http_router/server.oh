@@ -1,0 +1,28 @@
+// HTTP router — reads the request, routes GET vs POST. Raw syscalls, no libc.
+// Uses std/core (bcopy) + std/str (starts). syscalls: socket41 setsockopt54
+// bind49 listen50 accept43 read0 write1 close3.
+#handle(c:6):v{
+req:[2048]1
+sys(0,c,&req,2048)
+resp:[256]1
+o:=0
+?starts(req,"POST"){
+o=bcopy(resp,0,"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nPOST ok")
+}:{
+o=bcopy(resp,0,"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nGET ok")
+}
+sys(1,c,&resp,o)
+sys(3,c)}
+#main(){
+fd:=sys(41,2,1,0)
+?fd<0{\1}
+one:=1
+sys(54,fd,1,2,&one,4)
+sa:[16]1=[2,0,31,144,0,0,0,0,0,0,0,0,0,0,0,0]
+?sys(49,fd,&sa,16)<0{\2}
+sys(50,fd,16)
+~1{
+c:=sys(43,fd,0,0)
+?c<0{\3}
+handle(c)}
+0}
