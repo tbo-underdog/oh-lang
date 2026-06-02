@@ -13,7 +13,7 @@ int main(void){
     sa.sin_addr.s_addr=INADDR_ANY;
     if(bind(fd,(struct sockaddr*)&sa,sizeof(sa))<0) return 2;
     listen(fd,16);
-    const char*resp="HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 21\r\nConnection: close\r\n\r\nHello from Overhaul!\n";
+    const char*resp="HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 15\r\nConnection: close\r\n\r\nHello from Oh!\n";
     size_t n=strlen(resp);
     for(;;){
         int c=accept(fd,0,0);

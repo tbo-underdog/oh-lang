@@ -1,17 +1,17 @@
-# Overhaul Language Specification (AI Reference)
+# Oh Language Specification (AI Reference)
 
-This document teaches an AI to **read and write Overhaul** completely. Overhaul
+This document teaches an AI to **read and write Oh** completely. Oh
 is an AI-native systems language: token-dense source, static types, no garbage
 collector, no mandatory standard library, compiles to native code via LLVM.
-Humans are not expected to read raw Overhaul — the `ohtranslate` tool converts
+Humans are not expected to read raw Oh — the `ohtranslate` tool converts
 it to readable pseudo-code (see README). This spec is the source of truth for
-the syntax; load it before generating Overhaul.
+the syntax; load it before generating Oh.
 
 ---
 
 ## 1. Mental model
 
-- One file or many compiled together as ONE whole program (`overhaul a.oh b.oh ...`).
+- One file or many compiled together as ONE whole program (`oh a.oh b.oh ...`).
 - A program is a list of function definitions. `main` is the entry point; its
   return value becomes the process exit code.
 - Everything is statically typed. The default scalar type is **i32**.
@@ -157,10 +157,10 @@ sys(3,c)}                         // close
 ## 12. Build commands
 
 ```
-overhaul app.oh -o app                         # native x86-64 binary
-overhaul std/core.oh std/io.oh app.oh -o app   # link stdlib modules
-overhaul --target aarch64-linux --emit-ir app.oh -o app   # emit ARM64 IR
-overhaul --emit-ir app.oh -o app               # keep the .ll for inspection
+oh app.oh -o app                         # native x86-64 binary
+oh std/core.oh std/io.oh app.oh -o app   # link stdlib modules
+oh --target aarch64-linux --emit-ir app.oh -o app   # emit ARM64 IR
+oh --emit-ir app.oh -o app               # keep the .ll for inspection
 ```
 
 Freestanding (zero-dependency) build: `--emit-ir`, then

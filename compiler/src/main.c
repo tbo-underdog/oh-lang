@@ -20,7 +20,7 @@ static char *read_file(const char *path) {
 
 static void usage(void) {
     fprintf(stderr,
-        "Usage: overhaul [--target <triple>] [--emit-ir] <file.oh> [-o <output>]\n"
+        "Usage: oh [--target <triple>] [--emit-ir] <file.oh> [-o <output>]\n"
         "\n"
         "Flags:\n"
         "  --emit-ir          Keep the LLVM IR (.ll) file alongside the binary\n"
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
             return 1;
         } else {
             /* Positional. A non-.oh positional with no -o yet is the output
-             * (legacy `overhaul f.oh out` form). Everything else is an input
+             * (legacy `oh f.oh out` form). Everything else is an input
              * source file — multiple files are compiled together as one unit,
              * which is how a shared stdlib is linked (no per-program re-emit). */
             size_t L = strlen(argv[i]);

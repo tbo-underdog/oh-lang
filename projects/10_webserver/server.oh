@@ -1,4 +1,4 @@
-// Overhaul HTTP server — raw Linux x86-64 syscalls, no libc, no stdlib.
+// Oh HTTP server — raw Linux x86-64 syscalls, no libc, no stdlib.
 // syscalls: socket=41 bind=49 listen=50 accept=43 write=1 close=3 setsockopt=54
 #slen(s:*1){
 i:=0
@@ -13,7 +13,7 @@ sys(54,fd,1,2,&one,4)
 sa:[16]1=[2,0,31,144,0,0,0,0,0,0,0,0,0,0,0,0]
 ?sys(49,fd,&sa,16)<0{\2}
 sys(50,fd,16)
-resp:="HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 21\r\nConnection: close\r\n\r\nHello from Overhaul!\n"
+resp:="HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 15\r\nConnection: close\r\n\r\nHello from Oh!\n"
 n:=slen(resp)
 ~1{
 c:=sys(43,fd,0,0)

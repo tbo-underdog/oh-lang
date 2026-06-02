@@ -5,10 +5,10 @@ HDR = src/lexer.h src/parser.h src/typechecker.h src/codegen.h src/common.h
 
 .PHONY: all clean
 
-all: overhaul
+all: oh
 
-overhaul: $(SRC) $(HDR)
-	$(CC) $(CFLAGS) -o overhaul $(SRC)
+oh: $(SRC) $(HDR)
+	$(CC) $(CFLAGS) -o oh $(SRC)
 
 clean:
-	rm -f overhaul *.c.bak
+	rm -f oh *.c.bak

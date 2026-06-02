@@ -1,5 +1,5 @@
 /*
- * codegen.c — LLVM IR text emitter for Overhaul
+ * codegen.c — LLVM IR text emitter for Oh
  *
  * Strategy: alloca/load/store for all locals (SSA mem2reg promoted by
  * clang's optimizer).  Every expression returns a fresh %tmp_N register.
@@ -22,7 +22,7 @@ static int target_is_aarch64(void) {
     return g_target == TARGET_AARCH64_LINUX || g_target == TARGET_AARCH64_MACOS;
 }
 
-/* Overhaul's syscall ABI is "Linux x86-64 numbers". For other targets the
+/* Oh's syscall ABI is "Linux x86-64 numbers". For other targets the
  * codegen remaps a constant syscall number to that target's number, so .oh
  * source stays portable and token-identical across arches. Linux x86-64 ->
  * Linux aarch64 mapping for the calls our programs/stdlib use. */
@@ -904,7 +904,7 @@ static int emit_expr(Expr *e) {
 
         /* `sys` builtin → native syscall via per-arch inline asm.
          * sys(num, a1..a6); each arg widened to i64. Source uses Linux x86-64
-         * syscall numbers (Overhaul's ABI); the number is remapped per target.
+         * syscall numbers (Oh's ABI); the number is remapped per target.
          *   x86-64:  `syscall`  num=rax args=rdi,rsi,rdx,r10,r8,r9  ret=rax
          *   aarch64: `svc #0`   num=x8  args=x0,x1,x2,x3,x4,x5      ret=x0  */
         if (strcmp(e->call.name, "sys") == 0) {
@@ -1683,14 +1683,14 @@ void codegen(Program *prog, const char *out_ll_path, TargetTriple target) {
     }
 
     /* Module header */
-    fprintf(out, "; Overhaul LLVM IR\n");
+    fprintf(out, "; Oh LLVM IR\n");
     fprintf(out, "target datalayout = \"%s\"\n", target_datalayout(target));
     fprintf(out, "target triple = \"%s\"\n\n", target_llvm_triple(target));
 
     /* Emit string literal globals (.rodata) */
     emit_string_globals();
 
-    /* Hardware bit intrinsics exposed as Overhaul builtins. Declaring them
+    /* Hardware bit intrinsics exposed as Oh builtins. Declaring them
      * lets a single call lower to one instruction (popcnt/lzcnt/tzcnt/bswap)
      * instead of relying on clang to recognise a hand-written loop idiom. */
     fprintf(out, "declare i32 @llvm.ctpop.i32(i32)\n");

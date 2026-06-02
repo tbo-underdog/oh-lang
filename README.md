@@ -1,13 +1,15 @@
-# Overhaul
+# Oh
+
+*Oh — why didn't we think of this sooner?*
 
 **An AI-native systems language.** Token-dense source, static types, no garbage
 collector, no mandatory standard library. Compiles through LLVM to native code
-and produces freestanding, zero-dependency binaries.
+and produces freestanding, zero-dependency binaries. Source files end in `.oh`.
 
-Overhaul is built on one premise: **the programmer is an AI, the reviewer is a
+Oh is built on one premise: **the programmer is an AI, the reviewer is a
 human.** So the source is optimized for the lowest possible token cost (cheaper
 for an AI to write and process), and a decoder turns it back into readable
-pseudo-code for humans to verify. You do not read raw Overhaul; you read the
+pseudo-code for humans to verify. You do not read raw Oh; you read the
 decoded form and the tests.
 
 > Status: **v1**. Honest scope below — this is a young compiler with a real but
@@ -44,14 +46,14 @@ Requires a C compiler and `clang` (LLVM). ARM64 cross-builds also need `lld` and
 `qemu-user-static` to run/verify.
 
 ```sh
-make -C compiler            # builds ./compiler/overhaul
+make -C compiler            # builds ./compiler/oh
 make -C translator          # builds ./translator/ohtranslate (the decoder)
 
 # compile and run a program
-./compiler/overhaul tests/01_add.oh -o /tmp/add && /tmp/add; echo $?   # -> 7
+./compiler/oh tests/01_add.oh -o /tmp/add && /tmp/add; echo $?   # -> 7
 
 # link with stdlib modules (only what you call is included)
-./compiler/overhaul std/core.oh std/io.oh myapp.oh -o myapp
+./compiler/oh std/core.oh std/io.oh myapp.oh -o myapp
 ```
 
 Run the full test suite (the GREEN check):
@@ -61,9 +63,9 @@ Run the full test suite (the GREEN check):
 ARCH=arm64 ./run_tests.sh   # cross-compile + run under qemu-aarch64
 ```
 
-## Reading Overhaul (the decoder)
+## Reading Oh (the decoder)
 
-Raw Overhaul is dense on purpose. To read it, decode it:
+Raw Oh is dense on purpose. To read it, decode it:
 
 ```sh
 ./translator/ohtranslate tests/04_fibonacci.oh
@@ -74,10 +76,10 @@ function fib(n: i32) -> i32 {
 }
 ```
 
-## Teaching an AI to write Overhaul
+## Teaching an AI to write Oh
 
 The entire language is specified for AI consumption in one file: [SPEC.md](SPEC.md).
-To make any capable coding model fluent in Overhaul, load that spec into its
+To make any capable coding model fluent in Oh, load that spec into its
 context. The simplest command:
 
 ```sh
@@ -86,30 +88,30 @@ cat SPEC.md          # pipe/paste this into your AI's context
 
 Ready-to-paste instruction for an agent:
 
-> Read `SPEC.md` in full — it is the complete Overhaul language reference. From
-> now on, write all code in Overhaul according to that spec. Compile with
-> `./compiler/overhaul <files...> -o out`, prove correctness with
+> Read `SPEC.md` in full — it is the complete Oh language reference. From
+> now on, write all code in Oh according to that spec. Compile with
+> `./compiler/oh <files...> -o out`, prove correctness with
 > `./run_tests.sh`, and when a human needs to read your code, decode it with
 > `./translator/ohtranslate <file.oh>`.
 
-That single file is enough for an AI to read and write Overhaul at a high level —
+That single file is enough for an AI to read and write Oh at a high level —
 no fine-tuning or examples beyond the spec are required.
 
 ## The AI development workflow
 
-Overhaul is meant to be driven by an AI under human direction, using strict TDD.
+Oh is meant to be driven by an AI under human direction, using strict TDD.
 The division of labor:
 
 **The human owns intent and the definition of done.**
 1. You write the **product story** — what the software should do.
 2. You define the **base test cases**: the inputs and the exact pass/fail signal
-   (in Overhaul, a test passes iff the program compiles **and** its exit code
+   (in Oh, a test passes iff the program compiles **and** its exit code
    matches the expected value — see `run_tests.sh`). You do not need to read
-   Overhaul to know if a test passed; you read the green/red result.
+   Oh to know if a test passed; you read the green/red result.
 
 **The AI owns the implementation, via RED → CODE → GREEN.**
 3. **RED** — tests exist and fail (the behavior isn't built yet).
-4. **CODE** — the AI writes the Overhaul implementation.
+4. **CODE** — the AI writes the Oh implementation.
 5. **GREEN** — the tests pass. `run_tests.sh` is the arbiter.
 
 The AI may also *write* tests (it's faster), **as long as the human understands

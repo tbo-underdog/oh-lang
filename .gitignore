@@ -1,5 +1,5 @@
 # build artifacts — rebuilt from source, never committed
-compiler/overhaul
+compiler/oh
 compiler/*.o
 compiler/src/*.o
 translator/ohtranslate

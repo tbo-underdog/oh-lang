@@ -2,7 +2,7 @@
 #main(){
 print("=== stdlib test ===\n")
 // io
-print("hello from overhaul stdlib\n")
+print("hello from oh stdlib\n")
 printn(12345)
 // str: streq
 ?streq("abc","abc")!=1{\1}

@@ -1,7 +1,7 @@
 /*
- * Overhaul -> Human-Readable Translator
+ * Oh -> Human-Readable Translator
  *
- * Reads a .oh file, parses it using the Overhaul lexer/parser,
+ * Reads a .oh file, parses it using the Oh lexer/parser,
  * then pretty-prints the AST as readable pseudo-C to stdout.
  */
 

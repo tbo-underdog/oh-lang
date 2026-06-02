@@ -1,5 +1,5 @@
 #!/bin/bash
-# Overhaul test runner — the GREEN check.
+# Oh test runner — the GREEN check.
 #
 # TDD workflow: each test declares an expected exit code. A program PASSES only
 # if it compiles AND its process exit code matches. This is the single source of
@@ -10,7 +10,7 @@
 #   ARCH=arm64 ./run_tests.sh # cross-compile + run under qemu-aarch64-static
 set -u
 cd "$(dirname "$0")"
-OH=./compiler/overhaul
+OH=./compiler/oh
 ARCH="${ARCH:-x86_64}"
 pass=0; fail=0; failed=()
 
