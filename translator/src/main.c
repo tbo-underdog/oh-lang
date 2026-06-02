@@ -220,15 +220,19 @@ static void print_stmt(Stmt *s) {
     case ST_VARDECL:
         print_indent();
         if (s->vardecl.typ == NULL) {
-            /* type-inferred (:=) declaration — translator has no typechecker,
-             * so show inference rather than a bogus type */
+            /* type-inferred (:=) declaration */
             printf("%s := ", s->vardecl.name);
+            print_expr(s->vardecl.init);
+        } else if (s->vardecl.init == NULL) {
+            /* uninitialized declaration (e.g. scratch buffer) */
+            printf("%s: ", s->vardecl.name);
+            print_type(s->vardecl.typ);
         } else {
             printf("%s: ", s->vardecl.name);
             print_type(s->vardecl.typ);
             printf(" = ");
+            print_expr(s->vardecl.init);
         }
-        print_expr(s->vardecl.init);
         printf(";\n");
         return;
 
