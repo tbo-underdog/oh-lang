@@ -54,6 +54,7 @@ run 09_bitflip        0 projects/09_bitflip/bitflip.oh
 echo "== stdlib =="
 run stdlib  0 std/core.oh std/str.oh std/io.oh tests/stdlib/test_std.oh
 run stdlib_mem 0 std/mem.oh tests/stdlib/test_mem.oh
+run stdlib_json 0 std/core.oh std/str.oh std/json.oh tests/stdlib/test_json.oh
 
 echo "-------------------------------------------"
 echo "RESULT: $pass passed, $fail failed  (arch=$ARCH)"

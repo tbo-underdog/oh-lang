@@ -136,6 +136,7 @@ Compile the modules you use alongside your program; unused functions cost 0 byte
 - **std/str**: `streq(a,b)` `starts(s,p)` `atoi(s)` `sfind(haystack,needle)`
 - **std/io**: `print(s)` `eprint(s)` `printn(n)`
 - **std/net**: `connect_to(a,b,c,e,port)` (→i64 fd) · `status(buf)` (parse HTTP status)
+- **std/json**: `json_int(buf,key)` (signed int field, -1 if absent) · `json_has(buf,key)`. Flat-object field extraction, no allocation.
 - **std/mem**: `heap_new(h,bytes)` (mmap a heap; `h` is a `[3]6` state array) · `halloc(h,n)` (→i64 addr; cast e.g. `(*3)halloc(h,40)`) · `hused(h)`. No globals — the caller holds the heap state array.
 
 ## 11. Complete worked example — TCP echo of a fixed HTTP response

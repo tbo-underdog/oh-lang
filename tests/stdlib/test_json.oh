@@ -1,0 +1,9 @@
+#main(){
+j:="{\"port\": 8080, \"retries\": -3, \"timeout\": 250, \"name\": \"oh\"}"
+?json_int(j,"port")!=8080{\1}
+?json_int(j,"retries")!=-3{\2}
+?json_int(j,"timeout")!=250{\3}
+?json_int(j,"missing")!=-1{\4}
+?json_has(j,"name")!=1{\5}
+?json_has(j,"nope")!=0{\6}
+0}
