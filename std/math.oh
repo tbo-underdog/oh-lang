@@ -1,0 +1,13 @@
+// math: small integer utilities (prefixed to avoid clashing with user names).
+#iabs(x)x<0?0-x:x
+#imin(a,b)a<b?a:b
+#imax(a,b)a>b?a:b
+#clamp(x,lo,hi)x<lo?lo:(x>hi?hi:x)
+#ipow(base,exp){
+r:=1
+@i,exp{r=r*base}
+r}
+#isqrt(n){
+r:=0
+~(r+1)*(r+1)<=n{r=r+1}
+r}

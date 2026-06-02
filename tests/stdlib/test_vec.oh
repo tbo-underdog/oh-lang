@@ -1,0 +1,14 @@
+#main(){
+h:[3]6
+heap_new(h,65536)
+v:[3]6
+vec_new(v,h,2)
+@i,10{vec_push(v,h,i*i)}
+?vec_len(v)!=10{\1}
+?vec_get(v,5)!=25{\2}
+?vec_get(v,9)!=81{\3}
+vec_set(v,0,100)
+?vec_get(v,0)!=100{\4}
+?vec_pop(v)!=81{\5}
+?vec_len(v)!=9{\6}
+0}

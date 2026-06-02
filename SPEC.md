@@ -136,6 +136,8 @@ Compile the modules you use alongside your program; unused functions cost 0 byte
 - **std/str**: `streq(a,b)` `starts(s,p)` `atoi(s)` `sfind(haystack,needle)`
 - **std/io**: `print(s)` `eprint(s)` `printn(n)`
 - **std/net**: `connect_to(a,b,c,e,port)` (→i64 fd) · `status(buf)` (parse HTTP status)
+- **std/vec**: growable i32 array on a heap (needs std/mem). State `v:[3]6`. `vec_new(v,h,cap)` `vec_push(v,h,x)` `vec_get(v,i)` `vec_set(v,i,x)` `vec_len(v)` `vec_pop(v)`.
+- **std/math**: `iabs` `imin` `imax` `clamp(x,lo,hi)` `ipow(base,exp)` `isqrt(n)`.
 - **std/json**: `json_int(buf,key)` (signed int field, -1 if absent) · `json_has(buf,key)`. Flat-object field extraction, no allocation.
 - **std/mem**: `heap_new(h,bytes)` (mmap a heap; `h` is a `[3]6` state array) · `halloc(h,n)` (→i64 addr; cast e.g. `(*3)halloc(h,40)`) · `hused(h)`. No globals — the caller holds the heap state array.
 
