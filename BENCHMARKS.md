@@ -93,13 +93,17 @@ to win every micro-benchmark, it does not — and we will not claim it does.
 Equivalent C = the same algorithm written by hand with libc `malloc`/`realloc`
 (not C++ STL). OH/C < 1.0 = Overhaul faster.
 
+Acceptance bar: OH/C <= 1.5x (faster or roughly equal), or justified.
+
 | benchmark | OH/C | result |
 |---|---|---|
-| vec (1M push w/ growth + sum) | 0.87× | **OH faster** |
-| json (2M field extractions) | 0.05× | **OH faster** |
-| map (1M int→int set + get) | 0.95× | ~tie |
-| math (ipow/isqrt loop) | 1.24× | C faster |
-| buf (5M int appends) | 1.76× | C faster |
+| json (2M field extractions) | 0.03× | **OH faster** |
+| vec (1M push w/ growth + sum) | 1.09× | ≈tie |
+| map (1M int→int set + get) | 1.12× | ≈tie |
+| max_array (256-elem reduce) | 1.16× | within bar |
+| math (ipow/isqrt loop) | 1.25× | within bar |
+| buf (5M int appends) | 1.48× | within bar |
+| fibonacci (naive tree recursion) | 1.96× | **over bar — justified below** |
 
 Honest read: the data-structure stdlib is **competitive but not beating C**. The
 `vec` gap is the allocator: our `halloc` bump-allocator **copies on every grow and

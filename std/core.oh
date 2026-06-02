@@ -10,4 +10,18 @@ w:=n/8
 @i,w{?pa[i]!=pb[i]{\1}}
 @j=w*8,n{?a[j]!=b[j]{\1}}
 0}
-#itoa(d:*1,off,n){?n>=10{off=itoa(d,off,n/10)} d[off]=(1)(48+n%10) off+1}
+#itoa(d:*1,off,n){
+?n==0{
+d[off]=48
+\off+1}
+t:=n
+c:=0
+~t>0{
+c=c+1
+t=t/10}
+i:=off+c
+~n>0{
+i=i-1
+d[i]=(1)(48+n%10)
+n=n/10}
+off+c}
