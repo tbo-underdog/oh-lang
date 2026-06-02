@@ -1,0 +1,17 @@
+#main(){
+h:[3]6
+heap_new(h,65536)
+b:[3]6
+buf_new(b,h,4)
+buf_str(b,h,"x=")
+buf_int(b,h,42)
+buf_str(b,h,";y=")
+buf_int(b,h,-7)
+buf_byte(b,h,59)
+?buf_len(b)!=10{\1}
+d:=(*1)buf_ptr(b)
+?d[0]!=120{\2}
+?d[2]!=52{\3}
+?d[3]!=50{\4}
+?d[7]!=45{\5}
+0}

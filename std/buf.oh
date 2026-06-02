@@ -1,0 +1,33 @@
+// buf: growable byte buffer / string builder on a heap. Needs std/mem + std/core.
+// State b:[3]6 = [dataptr, len, cap]. Pointers are i64 addrs.
+#buf_new(b:*6,h:*6,cap):v{
+b[0]=halloc(h,(6)cap)
+b[1]=0
+b[2]=(6)cap}
+#buf_byte(b:*6,h:*6,c):v{
+?b[1]>=b[2]{
+nc:=b[2]*2
+nd:=halloc(h,nc)
+old:=(*1)b[0]
+nw:=(*1)nd
+@i,(3)b[1]{nw[i]=old[i]}
+b[0]=nd
+b[2]=nc}
+d:=(*1)b[0]
+li:=(3)b[1]
+d[li]=(1)c
+b[1]=b[1]+1}
+#buf_str(b:*6,h:*6,s:*1):v{
+i:=0
+~s[i]!=0{
+buf_byte(b,h,(3)s[i])
+i=i+1}}
+#buf_int(b:*6,h:*6,n):v{
+?n<0{
+buf_byte(b,h,45)
+n=0-n}
+tmp:[16]1
+e:=itoa(tmp,0,n)
+@i,e{buf_byte(b,h,(3)tmp[i])}}
+#buf_ptr(b:*6):6 b[0]
+#buf_len(b:*6)(3)b[1]

@@ -136,6 +136,8 @@ Compile the modules you use alongside your program; unused functions cost 0 byte
 - **std/str**: `streq(a,b)` `starts(s,p)` `atoi(s)` `sfind(haystack,needle)`
 - **std/io**: `print(s)` `eprint(s)` `printn(n)`
 - **std/net**: `connect_to(a,b,c,e,port)` (→i64 fd) · `status(buf)` (parse HTTP status)
+- **std/buf**: growable byte buffer / string builder on a heap (needs std/mem+core). `buf_new(b,h,cap)` `buf_byte(b,h,c)` `buf_str(b,h,s)` `buf_int(b,h,n)` `buf_ptr(b)` `buf_len(b)`.
+- **std/map**: fixed-capacity int->int hash map on a heap (needs std/mem; cap = power of two). `map_new(m,h,cap)` `map_set(m,k,v)` `map_get(m,k)` (-1 if absent) `map_has(m,k)` `map_count(m)`.
 - **std/vec**: growable i32 array on a heap (needs std/mem). State `v:[3]6`. `vec_new(v,h,cap)` `vec_push(v,h,x)` `vec_get(v,i)` `vec_set(v,i,x)` `vec_len(v)` `vec_pop(v)`.
 - **std/math**: `iabs` `imin` `imax` `clamp(x,lo,hi)` `ipow(base,exp)` `isqrt(n)`.
 - **std/json**: `json_int(buf,key)` (signed int field, -1 if absent) · `json_has(buf,key)`. Flat-object field extraction, no allocation.
