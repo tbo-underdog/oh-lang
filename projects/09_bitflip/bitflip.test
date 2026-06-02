@@ -1,0 +1,8 @@
+Project: Bit Flip Manipulation
+Operations: flipbits (bitwise NOT via -1-x), popcount (32-bit)
+Tests:
+  For each value in [5,3,8,1,9,2,7,4]:
+    popcount(x) + popcount(flip(x)) must equal 32 (all bits accounted for)
+  flipbits(0) == -1   (0x00000000 -> 0xFFFFFFFF)
+  flipbits(-1) == 0   (0xFFFFFFFF -> 0x00000000)
+Expected exit code: 0

@@ -1,0 +1,9 @@
+Project: Arena Allocator
+Description: Bump-pointer allocator over an 8-slot stack-allocated i32 buffer
+Operations: aalloc (returns slot index), areset (resets bump pointer)
+Test:
+  Allocate 8 slots, write i*7 to each
+  Reset the arena
+  Re-allocate 8 slots, verify values unchanged (buf still holds data)
+  Try to allocate when full -> expect -1
+Expected exit code: 0

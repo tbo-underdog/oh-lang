@@ -1,0 +1,8 @@
+Project: Quicksort
+Algorithm: Lomuto partition scheme, in-place
+Input: [9,3,7,1,0,8,4,2,6,5,15,11,13,10,12,14] (16 elements)
+Test:
+  Sort the array
+  Verify sorted (issorted check)
+  Verify first element == 0, last == 15
+Expected exit code: 0

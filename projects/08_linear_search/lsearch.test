@@ -1,0 +1,8 @@
+Project: Linear Search
+Input: [3,7,1,9,5,2,8,4,6,0] (10 elements)
+Tests:
+  search(5) -> index 4
+  search(3) -> index 0
+  search(0) -> index 9
+  search(99) -> -1 (not found)
+Expected exit code: 0

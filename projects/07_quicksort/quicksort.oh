@@ -1,0 +1,22 @@
+#swap(*a,i,j):v{t:=a[i] a[i]=a[j] a[j]=t}
+#qpart(*a,lo,hi){
+p:=a[hi]
+i:=lo-1
+@j=lo,hi{?a[j]<=p{i=i+1 swap(a,i,j)}}
+swap(a,i+1,hi)
+i+1}
+#qsort(*a,lo,hi):v{
+?lo<hi{
+pp:=qpart(a,lo,hi)
+qsort(a,lo,pp-1)
+qsort(a,pp+1,hi)}}
+#issorted(*a,n){
+@i,n-1{?a[i]>a[i+1]{\0}}
+1}
+#main(){
+a:[16]3=[9,3,7,1,0,8,4,2,6,5,15,11,13,10,12,14]
+qsort(a,0,15)
+?issorted(a,16)==0{\1}
+?a[0]!=0{\2}
+?a[15]!=15{\3}
+0}

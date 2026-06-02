@@ -1,0 +1,27 @@
+#hinit(*k,*v,cap):v{
+@i,cap{k[i]=-999999 v[i]=0}}
+#hset(*k,*v,cap,key,val):v{
+h:=key&15
+~k[h]!=-999999&&k[h]!=key{h=(h+1)&15}
+k[h]=key
+v[h]=val}
+#hget(*k,*v,cap,key){
+h:=key&15
+~k[h]!=-999999&&k[h]!=key{h=(h+1)&15}
+k[h]==key?v[h]:-1}
+#main(){
+keys:[16]3=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+vals:[16]3=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+hinit(keys,vals,16)
+hset(keys,vals,16,2,20)
+hset(keys,vals,16,5,50)
+hset(keys,vals,16,7,70)
+hset(keys,vals,16,3,30)
+hset(keys,vals,16,9,90)
+?hget(keys,vals,16,2)!=20{\1}
+?hget(keys,vals,16,5)!=50{\2}
+?hget(keys,vals,16,7)!=70{\3}
+?hget(keys,vals,16,3)!=30{\4}
+?hget(keys,vals,16,9)!=90{\5}
+?hget(keys,vals,16,99)!=-1{\6}
+0}

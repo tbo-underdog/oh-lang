@@ -1,0 +1,11 @@
+Project: Stack Data Structure
+Description: LIFO stack, capacity 16, backed by i32 array
+Operations: push, pop, peek, ssize
+Test:
+  Push values 1..10 onto stack
+  Verify size == 10
+  Verify peek == 10 (top of stack)
+  Pop all 10 values, verify strictly decreasing (LIFO order)
+  Verify size == 0 after drain
+  Pop from empty stack -> expect -2
+Expected exit code: 0

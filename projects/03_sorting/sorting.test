@@ -1,0 +1,8 @@
+Project: Sorting Algorithms
+Description: Bubble sort, insertion sort, selection sort on i32 arrays
+Input: [5,3,8,1,9,2,7,4,6,0]
+Test:
+  Sort with bubble sort    -> verify sorted, first=0, last=9
+  Sort with insertion sort -> verify sorted
+  Sort with selection sort -> verify sorted
+Expected exit code: 0

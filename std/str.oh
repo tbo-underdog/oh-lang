@@ -1,0 +1,29 @@
+// str: comparisons, parsing, search
+#streq(a:*1,b:*1){
+i:=0
+~1{
+ca:=a[i]
+cb:=b[i]
+?ca!=cb{\0}
+?ca==0{\1}
+i=i+1}
+0}
+#starts(s:*1,p:*1){
+i:=0
+~p[i]!=0{
+?s[i]!=p[i]{\0}
+i=i+1}
+1}
+#atoi(s:*1){
+n:=0
+i:=0
+~s[i]>=48&&s[i]<=57{n=n*10+(3)(s[i])-48 i=i+1}
+n}
+#sfind(h:*1,nd:*1){
+hl:=slen(h)
+nl:=slen(nd)
+@i,hl-nl+1{
+m:=1
+@j,nl{?h[i+j]!=nd[j]{m=0}}
+?m==1{\i}}
+-1}

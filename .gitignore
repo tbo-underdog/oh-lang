@@ -1,0 +1,13 @@
+# build artifacts — rebuilt from source, never committed
+compiler/overhaul
+compiler/*.o
+compiler/src/*.o
+translator/ohtranslate
+translator/*.o
+# intermediate / output
+*.ll
+*.s
+*.o
+a.out
+# compiled benchmark/test binaries
+*_bench

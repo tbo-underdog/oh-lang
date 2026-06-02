@@ -1,0 +1,12 @@
+Project: 256-bit Bitset
+Description: Bitset over [8]i32 (256 bits), bit manipulation operations
+Operations: bset, bclear, btest, bcount
+Test:
+  Set bits 0, 7, 63, 127, 255
+  Test all 5 bits -> expect 1 (set)
+  Test bit 1 -> expect 0 (not set)
+  Count set bits -> expect 5
+  Clear bits 0 and 63
+  Test bit 0 -> expect 0 (cleared)
+  Count set bits -> expect 3
+Expected exit code: 0

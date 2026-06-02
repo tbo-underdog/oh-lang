@@ -1,0 +1,4 @@
+Test: abs
+Description: Conditional branching - absolute value
+Input: abs(-5)
+Expected output: 5

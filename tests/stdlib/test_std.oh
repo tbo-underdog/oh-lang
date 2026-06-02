@@ -1,0 +1,28 @@
+// exercises std/core, std/str, std/io
+#main(){
+print("=== stdlib test ===\n")
+// io
+print("hello from overhaul stdlib\n")
+printn(12345)
+// str: streq
+?streq("abc","abc")!=1{\1}
+?streq("abc","abd")!=0{\2}
+// str: starts
+?starts("hello world","hello")!=1{\3}
+?starts("hello","world")!=0{\4}
+// str: atoi
+?atoi("4096")!=4096{\5}
+?atoi("0")!=0{\6}
+// str: sfind
+?sfind("the quick brown fox","quick")!=4{\7}
+?sfind("abcdef","xyz")!=-1{\8}
+// core: memcpy/memcmp
+src:[8]1
+dst:[8]1
+memset(src,65,8)
+memcpy(dst,src,8)
+?memcmp(src,dst,8)!=0{\9}
+dst[3]=66
+?memcmp(src,dst,8)!=1{\10}
+print("all checks passed\n")
+0}

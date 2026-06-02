@@ -1,0 +1,4 @@
+Test: add
+Description: Arithmetic and function call
+Input: add(3, 4)
+Expected output: 7

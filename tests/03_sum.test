@@ -1,0 +1,4 @@
+Test: sum
+Description: Loop - sum of integers 1..N
+Input: sum(10)
+Expected output: 55

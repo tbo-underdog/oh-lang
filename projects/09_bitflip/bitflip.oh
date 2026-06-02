@@ -1,0 +1,16 @@
+#flipbits(x)~x
+#popcount(x){
+c:=0
+@b,32{
+m:=1<<b
+?(x&m)==m{c=c+1}}
+c}
+#main(){
+arr:[8]3=[5,3,8,1,9,2,7,4]
+@i,8{
+o:=arr[i]
+fl:=flipbits(o)
+?popcount(o)+popcount(fl)!=32{\1}}
+?flipbits(0)!=-1{\2}
+?flipbits(-1)!=0{\3}
+0}

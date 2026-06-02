@@ -1,0 +1,7 @@
+#maxarr(*a,n){
+m:=a[0]
+@i=1,n{?a[i]>m{m=a[i]}}
+m}
+#main(){
+arr:[5]3=[1,5,3,2,4]
+maxarr(arr,5)}

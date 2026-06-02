@@ -1,0 +1,8 @@
+Project: Integer Hash Map
+Description: Fixed-size hash map (16 slots, open addressing, linear probing)
+Operations: hinit, hset, hget
+Test:
+  Insert (2,20),(5,50),(7,70),(3,30),(9,90)
+  Retrieve all 5 keys -> verify correct values
+  Retrieve missing key 99 -> expect -1
+Expected exit code: 0

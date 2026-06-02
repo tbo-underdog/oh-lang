@@ -1,0 +1,34 @@
+#bset(*w,bit):v{
+word:=bit/32
+off:=bit%32
+w[word]=w[word]|(1<<off)}
+#bclear(*w,bit):v{
+word:=bit/32
+off:=bit%32
+m:=1<<off
+w[word]=w[word]-(w[word]&m)}
+#btest(*w,bit){
+word:=bit/32
+off:=bit%32
+m:=1<<off
+(w[word]&m)==m?1:0}
+#bcount(*w,n){
+cnt:=0
+@word,n{@b,32{
+m:=1<<b
+?(w[word]&m)==m{cnt=cnt+1}}}
+cnt}
+#main(){
+bits:[8]3=[0,0,0,0,0,0,0,0]
+bset(bits,0) bset(bits,7) bset(bits,63) bset(bits,127) bset(bits,255)
+?btest(bits,0)!=1{\1}
+?btest(bits,7)!=1{\2}
+?btest(bits,63)!=1{\3}
+?btest(bits,127)!=1{\4}
+?btest(bits,255)!=1{\5}
+?btest(bits,1)!=0{\6}
+?bcount(bits,8)!=5{\7}
+bclear(bits,0) bclear(bits,63)
+?btest(bits,0)!=0{\8}
+?bcount(bits,8)!=3{\9}
+0}

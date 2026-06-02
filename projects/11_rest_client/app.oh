@@ -1,0 +1,24 @@
+// REST app — uses std/core (slen,bcopy,itoa) + std/net (connect_to,status)
+#rest(method:*1,path:*1,body:*1){
+fd:=connect_to(127,0,0,1,8090)
+?fd<0{\-1}
+req:[1024]1
+o:=bcopy(req,0,method)
+o=bcopy(req,o," ")
+o=bcopy(req,o,path)
+o=bcopy(req,o," HTTP/1.1\r\nHost: x\r\nContent-Length: ")
+o=itoa(req,o,slen(body))
+o=bcopy(req,o,"\r\nConnection: close\r\n\r\n")
+o=bcopy(req,o,body)
+sys(1,fd,&req,o)
+resp:[4096]1
+n:=sys(0,fd,&resp,4096)
+sys(3,fd)
+?n<12{\-3}
+status(resp)}
+#main(){
+?rest("GET","/","")!=200{\1}
+?rest("POST","/items","hello")!=200{\2}
+?rest("PUT","/items/1","data")!=200{\3}
+?rest("DELETE","/items/1","")!=200{\4}
+0}
