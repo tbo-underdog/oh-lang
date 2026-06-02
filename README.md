@@ -130,9 +130,16 @@ platforms.** A change is mergeable when:
 
 1. `./run_tests.sh` is **fully green on x86-64**, and
 2. `ARCH=arm64 ./run_tests.sh` is **fully green on ARM64** (qemu), and
-3. it does not increase token cost on existing programs without a clear,
-   measured justification, and
-4. any performance claim is backed by a fold-proof benchmark (see BENCHMARKS.md).
+3. **every feature is benchmarked for BOTH tokens and performance vs C** —
+   add a `benchmarks/fair/<name>.{oh,c}` pair and run `benchmarks/bench.sh`
+   (it reports token count and fold-proof timing against C for each), and
+4. it does not increase token cost on existing programs without a clear,
+   measured justification, and any performance claim is backed by those numbers.
+
+> **Rule:** correctness alone is not enough. Two checks gate every change —
+> `run_tests.sh` (the GREEN check, both arches) **and** `benchmarks/bench.sh`
+> (the TOKENS + PERFORMANCE check vs C). A feature isn't done until both have
+> been run and the numbers recorded — wins *and* losses, honestly.
 
 Changes that can't be verified on the approved platforms won't be merged into the
 base — not because they're unwelcome, but because the base only ships what we can
