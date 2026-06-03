@@ -1642,12 +1642,39 @@ static void emit_func(FuncDef *f) {
      * what makes C's `static fib` get unrolled). `internal` + the attributes
      * below give clang the same latitude it has with C static functions. */
     int is_main = (strcmp(f->name, "main") == 0);
+    /* noalias (restrict) — sound subset: if a function has EXACTLY ONE pointer
+     * or array parameter and its element type is a non-pointer scalar, that
+     * pointer cannot alias any other pointer the function accesses (Oh has no
+     * globals; locals are distinct storage). Marking it noalias lets LLVM
+     * vectorize array kernels the way C does with `restrict`. Functions with
+     * 2+ pointer params are NOT marked — a caller may legally pass aliasing
+     * buffers, so assuming otherwise would be unsound. */
+    int ptr_param_count = 0, sole_ptr_idx = -1;
+    for (size_t i = 0; i < f->param_count; i++) {
+        TypeKind pk = f->param_types[i]->kind;
+        if (pk == TY_PTR || pk == TY_ARRAY) { ptr_param_count++; sole_ptr_idx = (int)i; }
+    }
+    int noalias_idx = -1;
+    if (ptr_param_count == 1) {
+        Type *pt = f->param_types[sole_ptr_idx];
+        TypeKind ek = pt->inner ? pt->inner->kind : TY_VOID;
+        switch (ek) {
+        case TY_I8: case TY_I16: case TY_I32: case TY_I64:
+        case TY_U8: case TY_U16: case TY_U32: case TY_U64:
+        case TY_F32: case TY_F64:
+            noalias_idx = sole_ptr_idx; break;
+        default: break;
+        }
+    }
     fprintf(out, "define %s%s @%s(", is_main ? "" : "internal fastcc ", ret_ll, f->name);
     for (size_t i = 0; i < f->param_count; i++) {
         if (i > 0) fprintf(out, ", ");
         TypeKind pk = f->param_types[i]->kind;
         if (pk == TY_ARRAY) pk = TY_PTR;
-        fprintf(out, "%s %%p%zu", llvm_scalar(pk), i);
+        if ((int)i == noalias_idx)
+            fprintf(out, "%s noalias %%p%zu", llvm_scalar(pk), i);
+        else
+            fprintf(out, "%s %%p%zu", llvm_scalar(pk), i);
     }
     fprintf(out, ")%s nounwind nosync nofree", is_main ? "" : " unnamed_addr");
     /* Interprocedural purity: pure functions (incl. recursive ones that only
