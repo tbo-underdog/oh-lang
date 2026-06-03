@@ -194,6 +194,10 @@ oh --target aarch64-linux --emit-ir app.oh -o app   # emit ARM64 IR
 oh --emit-ir app.oh -o app               # keep the .ll for inspection
 ```
 
-Freestanding (zero-dependency) build: `--emit-ir`, then
-`clang -nostdlib -static <start.s> app.ll -o app` (x86-64), or for ARM64:
-`clang --target=aarch64-linux-gnu -nostdlib -static -fuse-ld=lld <start_arm.s> app.ll -o app`.
+Freestanding (zero-dependency) build: `--emit-ir`, then link the start stub **and
+`tooling/rt.ll`** (self-contained memset/memcpy/memmove/memcmp — clang can
+synthesize calls to these from loops, and a `-nostdlib` build has no libc to
+supply them):
+`clang -nostdlib -static tooling/start_x86_64.s tooling/rt.ll app.ll -o app` (x86-64), or ARM64:
+`clang --target=aarch64-linux-gnu -nostdlib -static -fuse-ld=lld tooling/start_arm64.s tooling/rt.ll app.ll -o app`.
+The result has zero dynamic dependencies (`file` → "statically linked"), no libc.

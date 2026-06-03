@@ -7,7 +7,7 @@ BIN=/tmp/router_test
 ARCH="${ARCH:-x86_64}"
 if [ "$ARCH" = "arm64" ]; then
   ./compiler/oh --target aarch64-linux --emit-ir std/core.oh std/str.oh projects/12_http_router/server.oh -o $BIN >/dev/null 2>&1
-  clang --target=aarch64-linux-gnu -nostdlib -static -fuse-ld=lld tooling/start_arm64.s $BIN.ll -o $BIN.bin >/dev/null 2>&1
+  clang --target=aarch64-linux-gnu -nostdlib -static -fuse-ld=lld tooling/start_arm64.s tooling/rt.ll $BIN.ll -o $BIN.bin >/dev/null 2>&1
   qemu-aarch64-static $BIN.bin & SRV=$!
 else
   ./compiler/oh std/core.oh std/str.oh projects/12_http_router/server.oh -o $BIN.bin >/dev/null 2>&1

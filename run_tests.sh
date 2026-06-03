@@ -22,13 +22,35 @@ run() { # name  expected_exit  inputs...
   if [ "$ARCH" = "arm64" ]; then
     $OH --target aarch64-linux --emit-ir "$@" -o "$ll" >/dev/null 2>&1
     clang --target=aarch64-linux-gnu -nostdlib -static -fuse-ld=lld \
-        tooling/start_arm64.s "$ll.ll" -o "$ll.bin" >/dev/null 2>&1 || { fail=$((fail+1)); failed+=("$name[link]"); return; }
+        tooling/start_arm64.s tooling/rt.ll "$ll.ll" -o "$ll.bin" >/dev/null 2>&1 || { fail=$((fail+1)); failed+=("$name[link]"); return; }
     timeout 30 qemu-aarch64-static "$ll.bin" >/dev/null 2>&1; got=$?
   else
     $OH "$@" -o "$ll.bin" >/dev/null 2>&1 || { fail=$((fail+1)); failed+=("$name[compile]"); return; }
     timeout 30 "$ll.bin" >/dev/null 2>&1; got=$?
   fi
   if [ "$got" -eq "$want" ]; then pass=$((pass+1)); printf "  PASS  %-16s (exit %s)\n" "$name" "$got"
+  else fail=$((fail+1)); failed+=("$name"); printf "  FAIL  %-16s (got %s, want %s)\n" "$name" "$got" "$want"; fi
+}
+
+# Freestanding self-containment check: build -nostdlib with the start stub + rt
+# (memset/memcpy/memmove/memcmp), confirm ZERO dynamic deps, and run. This guards
+# the "always self-contained" guarantee even when clang synthesizes mem* libcalls.
+run_fs() { # name  expected_exit  inputs...
+  local name="$1" want="$2"; shift 2
+  local ll=/tmp/ohfs_$name
+  if [ "$ARCH" = "arm64" ]; then
+    $OH --target aarch64-linux --emit-ir "$@" -o "$ll" >/dev/null 2>&1
+    clang --target=aarch64-linux-gnu -nostdlib -static -fuse-ld=lld \
+        tooling/start_arm64.s tooling/rt.ll "$ll.ll" -o "$ll.bin" >/dev/null 2>&1 || { fail=$((fail+1)); failed+=("$name[fs-link]"); return; }
+    timeout 30 qemu-aarch64-static "$ll.bin" >/dev/null 2>&1; got=$?
+  else
+    $OH --emit-ir "$@" -o "$ll" >/dev/null 2>&1
+    clang -O3 -nostdlib -static tooling/start_x86_64.s tooling/rt.ll "$ll.ll" -o "$ll.bin" >/dev/null 2>&1 || { fail=$((fail+1)); failed+=("$name[fs-link]"); return; }
+    # must have NO dynamic dependencies
+    if file "$ll.bin" 2>/dev/null | grep -q "dynamically linked"; then fail=$((fail+1)); failed+=("$name[has-deps]"); return; fi
+    timeout 30 "$ll.bin" >/dev/null 2>&1; got=$?
+  fi
+  if [ "$got" -eq "$want" ]; then pass=$((pass+1)); printf "  PASS  %-16s (exit %s, freestanding)\n" "$name" "$got"
   else fail=$((fail+1)); failed+=("$name"); printf "  FAIL  %-16s (got %s, want %s)\n" "$name" "$got" "$want"; fi
 }
 
@@ -47,6 +69,9 @@ run 11_simd       0  tests/11_simd.oh
 run 12_ptrstruct  0  tests/12_ptrstruct.oh
 run 13_mem_safety 0  std/mem.oh tests/13_mem_safety.oh
 run 14_oom        137 std/mem.oh tests/14_oom.oh
+
+echo "== freestanding (zero-dependency, -nostdlib + rt) =="
+run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh
 
 echo "== projects (exit 0 = all internal assertions pass) =="
 run 01_hashmap        0 projects/01_hashmap/hashmap.oh

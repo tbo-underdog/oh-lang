@@ -1,0 +1,9 @@
+#main():3{
+h:[3]6
+heap_new(h,1048576)
+m:Map
+map_new(m,h,8192)
+@i,100{map_set(m,i,i*2)}
+?map_get(m,50)!=100{\1}
+?map_count(m)!=100{\2}
+0}
