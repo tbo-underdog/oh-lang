@@ -45,6 +45,8 @@ run 09_strtype    0  tests/09_strtype.oh
 run 10_struct     0  tests/10_struct.oh
 run 11_simd       0  tests/11_simd.oh
 run 12_ptrstruct  0  tests/12_ptrstruct.oh
+run 13_mem_safety 0  std/mem.oh tests/13_mem_safety.oh
+run 14_oom        137 std/mem.oh tests/14_oom.oh
 
 echo "== projects (exit 0 = all internal assertions pass) =="
 run 01_hashmap        0 projects/01_hashmap/hashmap.oh

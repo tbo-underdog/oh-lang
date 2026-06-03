@@ -1,0 +1,5 @@
+#main(){
+h:[3]6
+heap_new(h,1024)
+halloc(h,5000)
+0}

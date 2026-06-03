@@ -19,6 +19,7 @@ fl:=m.flags
 i:=k&(cap-1)
 ~fl[i]==1&&keys[i]!=k{i=(i+1)&(cap-1)}
 ?fl[i]==0{
+?m.count+1>=cap{sys(60,137)}
 fl[i]=1
 m.count=m.count+1}
 keys[i]=k

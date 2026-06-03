@@ -1,0 +1,13 @@
+#main():3{
+h:[3]6
+heap_new(h,65536)
+p1:=halloc(h,1000)
+heap_reset(h)
+p2:=halloc(h,1000)
+?p1!=p2{\1}
+m:=heap_mark(h)
+q:=halloc(h,500)
+heap_restore(h,m)
+r:=halloc(h,500)
+?q!=r{\2}
+0}

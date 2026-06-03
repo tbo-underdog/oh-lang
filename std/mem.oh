@@ -1,20 +1,26 @@
-// mem: mmap-backed bump heap. No globals — caller holds [base,used,cap] in `h:[3]6`.
-// halloc bump-allocates 8-aligned, returns an i64 address to cast.
+// mem: mmap-backed bump heap. No globals — caller holds [base,used,cap] in h:[3]6.
+// halloc bump-allocates 8-aligned. On exhaustion it ABORTS (exit 137) rather than
+// writing past the mapping — fail loud, never corrupt. The only way to reclaim is
+// scope-based: heap_reset frees everything; heap_mark/heap_restore free back to a
+// saved point (a bump arena). Memory is NOT re-zeroed on reset/restore.
 #heap_new(h:*6,bytes:6):v{
 b:=sys(9,0,bytes,3,34,-1,0)
+?b<0{sys(60,137)}
 h[0]=b
 h[1]=0
 h[2]=bytes}
 #halloc(h:*6,n:6):6{
 a:=(h[1]+7)/8*8
+?a+n>h[2]{sys(60,137)}
 p:=h[0]+a
 h[1]=a+n
 p}
 // hrealloc: if p is the most-recent allocation (p+oldn == base+used), extend it
-// in place (O(1), no copy) — this makes vec/buf growth amortized O(1) like C
-// realloc. Otherwise allocate fresh and copy oldn bytes.
+// in place (O(1), no copy). Otherwise allocate fresh and copy oldn bytes (the old
+// block is then unreachable until the next reset — bump cannot free it).
 #hrealloc(h:*6,p:6,oldn:6,newn:6):6{
 ?p+oldn==h[0]+h[1]{
+?h[1]+newn-oldn>h[2]{sys(60,137)}
 h[1]=h[1]+(newn-oldn)
 \p}
 np:=halloc(h,newn)
@@ -23,3 +29,7 @@ dst:=(*1)np
 @i,(3)oldn{dst[i]=src[i]}
 np}
 #hused(h:*6):6 h[1]
+// scope-based reclamation (the only free path)
+#heap_reset(h:*6):v{h[1]=0}
+#heap_mark(h:*6):6 h[1]
+#heap_restore(h:*6,m:6):v{h[1]=m}
