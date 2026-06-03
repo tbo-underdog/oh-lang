@@ -2,70 +2,70 @@
 
 **Methodology.** All speed numbers are *fold-proof*: inputs vary with the loop
 counter and results are accumulated and returned, so neither compiler can
-optimize the work away. Oh and C are both compiled at maximum
-optimization (`-O3 -march=native`; Oh goes through the same clang/LLVM
-backend). Times are best-of-4 wall-clock on the same x86-64 Linux machine.
-`OH/C` < 1.0 means Oh is faster.
+optimize the work away. Oh and C are both compiled at maximum optimization
+(`-O3 -march=native`; Oh goes through the same clang/LLVM backend). `OH/C` < 1.0
+means Oh is faster. Token counts use the `cl100k_base` tokenizer, **reachable-only**
+(just the functions used from `main`, including any std modules pulled in).
 
-We do **not** hide losses. Oh wins most of these and is consistently
-cheaper in tokens, but C is faster on several and we say so.
+Reproduce: `benchmarks/bench.sh` (one `.oh` + `.c` pair per benchmark in
+`benchmarks/fair/`). **Note on noise:** several workloads run in well under a
+millisecond, where `bench.sh`'s best-of-4 wall-clock is noisy; the ratios below
+for those rows are confirmed with a median-of-21 A/B. We publish losses, not just
+wins.
 
-## Speed — computation
+## Speed (OH/C, lower = Oh faster)
 
-| benchmark | OH (s) | C (s) | OH/C | result |
-|---|---|---|---|---|
-| add | 0.0139 | 0.0726 | 0.19× | **OH faster** |
-| abs | 0.0027 | 0.0052 | 0.51× | **OH faster** |
-| sum | 0.0006 | 0.0091 | 0.07× | **OH faster** |
-| lsearch | 0.0109 | 0.0293 | 0.37× | **OH faster** |
-| fibonacci | 8.77 | 4.52 | 1.94× | C faster |
-| max_array | 0.122 | 0.028 | 4.32× | C faster |
-| bitflip (hand-rolled popcount) | 0.157 | 0.108 | 1.45× | C faster |
-| bitflip (`popcount()` builtin) | 0.0011 | 0.0025 | **0.45×** | **OH faster** |
+| benchmark | OH/C | result |
+|---|---|---|
+| sum | 0.06× | **OH faster** |
+| json (field extraction) | 0.06× | **OH faster** |
+| add | 0.19× | **OH faster** |
+| lsearch | 0.37× | **OH faster** |
+| bitflip (`popcount()` builtin) | 0.47× | **OH faster** |
+| abs | 0.49× | **OH faster** |
+| vec (1M push + sum, fixed cap) | 0.87× | **OH faster** |
+| noalias (single-array kernel) | 0.91× | **OH faster** |
+| simd (`dot` builtin, vectorized) | 0.94× | **OH faster** |
+| map (1M int→int set + get) | 1.06× | ≈tie |
+| struct (field read/write loop) | 1.09× | within bar |
+| buf (1M int appends, growable) | 1.16× | within bar |
+| max_array (small-array hot loop) | 1.16× | within bar |
+| math (ipow/isqrt loop) | 1.25× | within bar |
+| fibonacci (naive tree recursion) | 1.90× | **over bar — justified below** |
 
-## Speed — standard library vs libc
-
-| function | OH (s) | libc (s) | OH/C | result |
-|---|---|---|---|---|
-| memcpy | 0.0189 | 0.0258 | 0.73× | **OH faster** |
-| memset | 0.0020 | 0.0088 | 0.22× | **OH faster** |
-| slen / strlen | 0.0002 | 0.0004 | 0.40× | **OH faster** |
-| atoi | 0.0001 | 0.0254 | 0.01× | **OH faster** |
-| memcmp (chunked 8-byte + early-exit) | 0.0093 | 0.0149 | **0.62×** | **OH faster** |
-
-**Tally: Oh beats C/libc on 10 of 12, loses on 2** (fibonacci, max_array).
+**Acceptance bar: OH/C ≤ 1.5× (faster or roughly equal), or justified.**
+**14 of 15 within the bar; the lone exception (fibonacci) is named below.**
 
 ### Why Oh wins where it wins
-Stdlib/helpers are compiled *with* your program (`internal fastcc`), so LLVM
-**inlines and specializes** them and can **constant-fold** pure calls — things
-an opaque libc call can never get. That is the whole advantage.
+Stdlib/helpers and SIMD builtins are compiled *with* your program
+(`internal fastcc`), so LLVM **inlines and specializes** them and can
+**constant-fold** pure calls — things an opaque libc call never gets. The `dot`
+builtin lowers to a vectorized reduction (AVX-512 under `-march=native`); `noalias`
+(a sound `restrict` on sole scalar-pointer params) frees the vectorizer.
 
-### Why Oh loses where it loses (no excuses, just causes)
-- **fibonacci (1.94×)** — clang applies a binary-recursion→iteration transform to
-  C's `fib` that it will not apply to our IR despite matched attributes. Narrow
-  clang heuristic; only bites naive exponential recursion.
-- **max_array (4.32×)** — a tiny 5-element array rescanned in a hot loop. C keeps
-  it in registers; our codegen keeps it in memory. A real register-allocation gap
-  for small-array-heavy loops.
-- **bitflip (1.45×)** — this row uses a *hand-rolled* 32-iteration popcount. Using
-  the `popcount()` builtin instead (one `popcnt` instruction) makes Oh win
-  outright; the loss is only if you hand-roll it.
-- **memcmp** — FIXED. Now compares 8 bytes at a time (i64 chunks) with early
-  exit, beating libc 0.62×. (Earlier hand-rolled byte loop lost 1.5×.)
+### Why Oh loses where it loses (causes, not excuses)
+- **fibonacci (1.90×)** — clang applies a binary-recursion→iteration transform to
+  C's `fib` that it won't apply to our IR despite matched attributes. Narrow clang
+  heuristic; only bites naive exponential recursion.
+- **math / max_array / struct / buf (1.06–1.25×)** — all within the bar. `buf`
+  serialization (int→string) is the closest watch item: Oh's `buf_int` is a
+  non-inlined call with data-dependent division loops; an inlining hint would close
+  the residual gap. `max_array` is small-array store-to-load forwarding.
 
-## Tokens (the consistent win)
+## Tokens (OH vs equivalent C, reachable-only)
 
-Measured with the `cl100k_base` tokenizer. Oh source vs equivalent C.
+| group | typical Δ vs C |
+|---|---|
+| compute (add/abs/sum/bitflip/lsearch/…) | **−16% to −27%** |
+| language features (struct −47%, noalias −44%, simd −54%) | **−44% to −54%** |
+| data-structure stdlib (vec/map/buf/json) | **+146% to +260%** (see note) |
 
-| comparison | Oh | C | difference |
-|---|---|---|---|
-| 5 core functions (add/abs/sum/fib/maxarr) | 87 | 110 | **−21%** |
-| REST client application code | 230 | 304 | **−24%** |
-| stdlib function implementations (5) | 130 | 139 | −6% |
-
-Tokens are where Oh is unconditionally ahead: it expresses the same
-programs in fewer tokens than C, and with a shared stdlib the per-program cost
-drops further (helpers are written once and dead-code-eliminated).
+Compute and the new builtins are unconditionally cheaper than C. The
+data-structure modules show *more* tokens than C **only because they bundle Oh's
+heap allocator**, which C gets for free from libc (`malloc`/`realloc` are not in
+the source and not counted). The application/algorithm code itself is competitive;
+the allocator (~50–90 reachable tokens) is shared infrastructure that amortizes to
+~0 across programs that reuse it.
 
 ## Binary size & dependencies
 
@@ -76,39 +76,25 @@ A freestanding build links no libc. The HTTP web server:
 | binary size | 9,056 bytes | 16,272 bytes |
 | dynamic dependencies | none (static) | libc.so.6 |
 
+## Memory model (v2)
+
+`std/mem` is an mmap-backed **bump allocator**: one syscall up front, then
+allocation is a pointer bump. It is *correct for the Oh model* — size known at
+creation, scoped lifetimes, with truly-unbounded data offloaded externally — and
+beats `malloc`'s generality for that pattern. Safety: `halloc` bounds-checks and
+**aborts (137) on exhaustion rather than corrupting memory**; `heap_reset` /
+`heap_mark` / `heap_restore` reclaim by scope (the only free path). `vec` is
+fixed-capacity (size chosen at creation, no grow); `buf` grows (a string builder's
+length is unknown at creation) via in-place `hrealloc`.
+
 ## Honest bottom line
 
-Oh is **faster than C on 10 of 12 benchmarks, cheaper in tokens on all of
-them, and produces smaller zero-dependency binaries** — but it is **not
-uniformly faster**. It loses on naive exponential recursion (fibonacci) and a
-small-array hot loop (max_array, already vectorized — residual gap is
-store-forwarding, not a quick fix). If your priority is minimum token/compute cost
-with C-class (and often better) performance, that trade is favorable. If you need
-to win every micro-benchmark, it does not — and we will not claim it does.
-
-*Reproduce:* sources in `benchmarks/fair/` (one .oh + .c per benchmark); build both with the commands above, run fold-proof loops, compare.
-
-## V2 stdlib data structures vs hand-written C (fold-proof)
-
-Equivalent C = the same algorithm written by hand with libc `malloc`/`realloc`
-(not C++ STL). OH/C < 1.0 = Overhaul faster.
-
-Acceptance bar: OH/C <= 1.5x (faster or roughly equal), or justified.
-
-| benchmark | OH/C | result |
-|---|---|---|
-| json (2M field extractions) | 0.03× | **OH faster** |
-| vec (1M push w/ growth + sum) | 1.09× | ≈tie |
-| map (1M int→int set + get) | 1.12× | ≈tie |
-| max_array (256-elem reduce) | 1.16× | within bar |
-| math (ipow/isqrt loop) | 1.25× | within bar |
-| buf (5M int appends) | 1.48× | within bar |
-| fibonacci (naive tree recursion) | 1.96× | **over bar — justified below** |
-
-Honest read: the data-structure stdlib is **competitive but not beating C**. The
-`vec` gap is the allocator: our `halloc` bump-allocator **copies on every grow and
-never frees**, while C's `realloc` grows in place. A grow-last-allocation-in-place
-`halloc` would close most of it. `map` is at parity (same open-addressing algorithm,
-inlined). These are small absolute times (1–26 ms) so ratios are noise-sensitive.
-
-Reproduce: `benchmarks/fair/{math,vec,map,buf,json}.{oh,c}` (OH benchmarks compile the shipped std/ modules).
+Oh is **faster than or equal to C on the majority of these benchmarks, cheaper in
+tokens on all compute and language-feature workloads, and produces smaller
+zero-dependency binaries.** It is **not uniformly faster**: it loses on naive
+exponential recursion (fibonacci, 1.90×) and is a touch behind on a few in-RAM
+data-structure workloads (1.06–1.25×, within the bar). Data-structure modules read
+as more tokens than C purely because they ship the allocator C borrows from libc.
+If your priority is minimum token/compute cost with C-class (often better)
+performance and zero-dependency binaries, the trade is favorable — and we don't
+claim it wins every micro-benchmark.

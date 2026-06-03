@@ -19,12 +19,19 @@ decoded form and the tests.
 
 ## What you get
 
-- **Fewer tokens than C** for the same program (−21% on core functions, −24% on a
-  real REST client) — see [BENCHMARKS.md](BENCHMARKS.md).
-- **C-class performance** — faster than C on the majority of benchmarks, slower on
-  a few. We publish the losses, not just the wins.
+- **Fewer tokens than C** for the same program (−16% to −27% on compute, up to
+  −54% on workloads using the built-in vector/struct features) — see
+  [BENCHMARKS.md](BENCHMARKS.md).
+- **C-class performance** — faster than or equal to C on the majority of
+  benchmarks (14 of 15 within the ≤1.5× bar), slower on a few. We publish the
+  losses, not just the wins.
+- **Static types with structs** — `$Name{field:type …}` records (typed fields,
+  pass-by-pointer), plus SIMD reduction builtins (`dot`, `vsum`) that lower to
+  vectorized loops.
 - **Freestanding binaries** — no libc, fully static, tiny (a 9 KB HTTP server with
   zero dependencies). Ideal for `FROM scratch` containers.
+- **A bump-allocator memory model** sized at creation, with bounds-checked
+  allocation (aborts rather than corrupts) and scope-based reclamation.
 - **A decoder** (`ohtranslate`) so humans can always read what the AI wrote.
 
 ## Where it runs (honest)

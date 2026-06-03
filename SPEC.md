@@ -157,7 +157,7 @@ Compile the modules you use alongside your program; unused functions cost 0 byte
 - **std/str**: `streq(a,b)` `starts(s,p)` `atoi(s)` `sfind(haystack,needle)`
 - **std/io**: `print(s)` `eprint(s)` `printn(n)`
 - **std/net**: `connect_to(a,b,c,e,port)` (→i64 fd) · `status(buf)` (parse HTTP status)
-- **std/buf**: fixed-capacity byte buffer / string builder on a heap (needs std/mem+core). State is a `Buf` (struct); pass it directly — it decays to `*Buf`. `buf_new(b,h,cap)` `buf_byte(b,c)` `buf_str(b,s)` `buf_int(b,n)` `buf_ptr(b)` `buf_len(b)`. Size is chosen at creation; append aborts on overflow.
+- **std/buf**: growable byte buffer / string builder on a heap (needs std/mem+core). State is a `Buf` (struct); pass it directly — it decays to `*Buf`. `buf_new(b,h,cap)` `buf_byte(b,h,c)` `buf_str(b,h,s)` `buf_int(b,h,n)` `buf_ptr(b)` `buf_len(b)`. A string builder's final length is unknown at creation, so buf grows (in place via hrealloc); the append fns take the heap `h`.
 - **std/map**: fixed-capacity int->int hash map on a heap (needs std/mem; cap = power of two and must exceed the entry count). State is a `Map`. `map_new(m,h,cap)` `map_set(m,k,v)` `map_get(m,k)` (-1 if absent) `map_has(m,k)` `map_count(m)`.
 - **std/vec**: fixed-capacity i32 array on a heap (needs std/mem). State is a `Vec`. `vec_new(v,h,cap)` `vec_push(v,x)` `vec_get(v,i)` `vec_set(v,i,x)` `vec_len(v)` `vec_pop(v)`. Size is chosen at creation (the Oh model: you know the size when you make it); push does not grow — it aborts past `cap`.
 - **std/math**: `iabs` `imin` `imax` `clamp(x,lo,hi)` `ipow(base,exp)` `isqrt(n)`.
