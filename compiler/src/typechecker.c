@@ -295,6 +295,15 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
             e->typ = make_type(a, TY_I32);
             return e->typ;
         }
+        /* SIMD reduction builtins over i32 arrays/pointers:
+         *   vsum(*a, n)     -> sum of a[0..n)              : i32
+         *   dot(*a, *b, n)  -> sum of a[i]*b[i] for i<n    : i32
+         * Lowered to a tight reduction loop that clang -O3 vectorizes. */
+        if (strcmp(e->call.name,"vsum")==0 || strcmp(e->call.name,"dot")==0) {
+            for (size_t i = 0; i < e->call.argc; i++) infer(e->call.args[i], ss, a);
+            e->typ = make_type(a, TY_I32);
+            return e->typ;
+        }
         FuncSig *sig = lookup_func(e->call.name);
         if (!sig) { fprintf(stderr, "Undeclared function '%s'\n", e->call.name); exit(1); }
         if (e->call.argc != sig->param_count) {

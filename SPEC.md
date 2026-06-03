@@ -139,6 +139,9 @@ Precedence (high→low): unary · `* / %` · `+ -` · `<< >>` · `< > <= >=` · 
   - Common numbers: read=0 write=1 close=3 mmap=9 socket=41 connect=42 accept=43
     bind=49 listen=50 setsockopt=54 exit=60.
 - `popcount(x)` `clz(x)` `ctz(x)` `bswap(x)` → one hardware instruction each.
+- SIMD reductions over i32 pointers/arrays (compiler emits a vectorized loop —
+  no need to hand-write one): `vsum(a, n)` → sum of `a[0..n)`; `dot(a, b, n)` →
+  sum of `a[i]*b[i]` for `i<n`. Both return i32; `n<=0` returns 0.
 
 ## 10. Standard library (`std/`, opt-in, dead-code-eliminated)
 

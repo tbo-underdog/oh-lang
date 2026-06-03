@@ -177,6 +177,46 @@ static void collect_strings_stmts(Stmt **body, size_t n) {
     }
 }
 
+/* ---- SIMD reduction builtin usage scan ----
+ * vsum/dot are lowered to module-level helper functions (so their loop lives in
+ * its own entry block — mem2reg-promotable and clang-vectorizable — regardless
+ * of the call site's context). Scan the program to know which to emit. */
+static int g_uses_vsum = 0, g_uses_dot = 0;
+static void scan_simd_expr(Expr *e) {
+    if (!e) return;
+    switch (e->kind) {
+    case EX_CALL:
+        if (strcmp(e->call.name,"vsum")==0) g_uses_vsum = 1;
+        else if (strcmp(e->call.name,"dot")==0) g_uses_dot = 1;
+        for (size_t i=0;i<e->call.argc;i++) scan_simd_expr(e->call.args[i]);
+        break;
+    case EX_BINOP:   scan_simd_expr(e->binop.lhs); scan_simd_expr(e->binop.rhs); break;
+    case EX_UNOP:    scan_simd_expr(e->unop.operand); break;
+    case EX_CAST:    scan_simd_expr(e->cast.operand); break;
+    case EX_TERNARY: scan_simd_expr(e->ternary.cond); scan_simd_expr(e->ternary.then_e); scan_simd_expr(e->ternary.else_e); break;
+    case EX_ARRAYIDX:scan_simd_expr(e->arridx.idx); break;
+    case EX_ARRAYLIT:for (size_t i=0;i<e->arrlit.elemc;i++) scan_simd_expr(e->arrlit.elems[i]); break;
+    default: break;
+    }
+}
+static void scan_simd_stmts(Stmt **body, size_t n) {
+    for (size_t i=0;i<n;i++) {
+        Stmt *s = body[i]; if (!s) continue;
+        switch (s->kind) {
+        case ST_VARDECL: scan_simd_expr(s->vardecl.init); break;
+        case ST_ASSIGN:  scan_simd_expr(s->assign.rhs); break;
+        case ST_DEREFASSIGN: scan_simd_expr(s->derefassign.rhs); break;
+        case ST_IDXASSIGN: scan_simd_expr(s->idxassign.idx); scan_simd_expr(s->idxassign.rhs); break;
+        case ST_FIELDASSIGN: scan_simd_expr(s->fieldassign.rhs); break;
+        case ST_RETURN:  scan_simd_expr(s->ret.val); break;
+        case ST_EXPRSTMT:scan_simd_expr(s->exprstmt); break;
+        case ST_IF: scan_simd_expr(s->ifst.cond); scan_simd_stmts(s->ifst.then_body,s->ifst.then_len); scan_simd_stmts(s->ifst.else_body,s->ifst.else_len); break;
+        case ST_FOR: scan_simd_expr(s->forst.init_init); scan_simd_expr(s->forst.init_rhs); scan_simd_expr(s->forst.cond); scan_simd_expr(s->forst.step_rhs); scan_simd_expr(s->forst.step_expr); scan_simd_stmts(s->forst.body,s->forst.body_len); break;
+        case ST_WHILE: scan_simd_expr(s->whilest.cond); scan_simd_stmts(s->whilest.body,s->whilest.body_len); break;
+        }
+    }
+}
+
 /* Number of decoded bytes a string literal expands to (escapes collapse to 1). */
 static size_t str_decoded_len(const char *text) {
     size_t n = 0;
@@ -1039,6 +1079,23 @@ static int emit_expr(Expr *e) {
             return r2;
         }
 
+        /* SIMD reduction builtins → call the emitted helper. Pointer/array
+         * args are already in ptr registers; the count arg is i32. */
+        if (strcmp(e->call.name,"vsum")==0 || strcmp(e->call.name,"dot")==0) {
+            int is_dot = (strcmp(e->call.name,"dot")==0);
+            int r2 = new_reg();
+            if (is_dot) {
+                fprintf(out, "  %%t%d = call fastcc i32 @__oh_dot(ptr ", r2);
+                emit_ref(arg_regs[0]); fprintf(out, ", ptr "); emit_ref(arg_regs[1]);
+                fprintf(out, ", i32 "); emit_ref(arg_regs[2]); fprintf(out, ")\n");
+            } else {
+                fprintf(out, "  %%t%d = call fastcc i32 @__oh_vsum(ptr ", r2);
+                emit_ref(arg_regs[0]); fprintf(out, ", i32 "); emit_ref(arg_regs[1]);
+                fprintf(out, ")\n");
+            }
+            return r2;
+        }
+
         TypeKind rk = e->typ->kind;
         int r = (rk == TY_VOID) ? -1 : new_reg();
 
@@ -1852,6 +1909,58 @@ void codegen(Program *prog, const char *out_ll_path, TargetTriple target) {
     fprintf(out, "declare i32 @llvm.ctlz.i32(i32, i1)\n");
     fprintf(out, "declare i32 @llvm.cttz.i32(i32, i1)\n");
     fprintf(out, "declare i32 @llvm.bswap.i32(i32)\n\n");
+
+    /* SIMD reduction builtins, lowered to self-contained helper functions whose
+     * tight loops clang -O3 vectorizes (mem-free phi loops). Emitted only when
+     * used. Read-only pointers marked noalias so dot's two pointers vectorize. */
+    g_uses_vsum = g_uses_dot = 0;
+    for (size_t i = 0; i < prog->func_count; i++)
+        scan_simd_stmts(prog->funcs[i].body, prog->funcs[i].body_len);
+    if (g_uses_vsum) {
+        fprintf(out,
+            "define internal fastcc i32 @__oh_vsum(ptr noalias readonly %%a, i32 %%n) unnamed_addr nounwind nosync nofree willreturn mustprogress {\n"
+            "entry:\n"
+            "  %%pos = icmp sgt i32 %%n, 0\n"
+            "  br i1 %%pos, label %%loop, label %%zero\n"
+            "zero:\n"
+            "  ret i32 0\n"
+            "loop:\n"
+            "  %%i = phi i32 [ 0, %%entry ], [ %%i1, %%loop ]\n"
+            "  %%acc = phi i32 [ 0, %%entry ], [ %%acc1, %%loop ]\n"
+            "  %%ep = getelementptr i32, ptr %%a, i32 %%i\n"
+            "  %%v = load i32, ptr %%ep\n"
+            "  %%acc1 = add nsw i32 %%acc, %%v\n"
+            "  %%i1 = add nsw i32 %%i, 1\n"
+            "  %%more = icmp slt i32 %%i1, %%n\n"
+            "  br i1 %%more, label %%loop, label %%done\n"
+            "done:\n"
+            "  ret i32 %%acc1\n"
+            "}\n\n");
+    }
+    if (g_uses_dot) {
+        fprintf(out,
+            "define internal fastcc i32 @__oh_dot(ptr noalias readonly %%a, ptr noalias readonly %%b, i32 %%n) unnamed_addr nounwind nosync nofree willreturn mustprogress {\n"
+            "entry:\n"
+            "  %%pos = icmp sgt i32 %%n, 0\n"
+            "  br i1 %%pos, label %%loop, label %%zero\n"
+            "zero:\n"
+            "  ret i32 0\n"
+            "loop:\n"
+            "  %%i = phi i32 [ 0, %%entry ], [ %%i1, %%loop ]\n"
+            "  %%acc = phi i32 [ 0, %%entry ], [ %%acc1, %%loop ]\n"
+            "  %%ea = getelementptr i32, ptr %%a, i32 %%i\n"
+            "  %%va = load i32, ptr %%ea\n"
+            "  %%eb = getelementptr i32, ptr %%b, i32 %%i\n"
+            "  %%vb = load i32, ptr %%eb\n"
+            "  %%m = mul nsw i32 %%va, %%vb\n"
+            "  %%acc1 = add nsw i32 %%acc, %%m\n"
+            "  %%i1 = add nsw i32 %%i, 1\n"
+            "  %%more = icmp slt i32 %%i1, %%n\n"
+            "  br i1 %%more, label %%loop, label %%done\n"
+            "done:\n"
+            "  ret i32 %%acc1\n"
+            "}\n\n");
+    }
 
     /* Forward-declare all functions */
     for (size_t i = 0; i < prog->func_count; i++) {

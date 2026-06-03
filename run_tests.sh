@@ -43,6 +43,7 @@ run 07_compound   0  tests/07_compound.oh
 run 08_arrayfill  0  tests/08_arrayfill.oh
 run 09_strtype    0  tests/09_strtype.oh
 run 10_struct     0  tests/10_struct.oh
+run 11_simd       0  tests/11_simd.oh
 
 echo "== projects (exit 0 = all internal assertions pass) =="
 run 01_hashmap        0 projects/01_hashmap/hashmap.oh
