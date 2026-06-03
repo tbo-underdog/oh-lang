@@ -5,7 +5,7 @@ off:=!bump
 off}
 #areset(*bump):v{!bump=0}
 #main(){
-buf:[8]3=[0,0,0,0,0,0,0,0]
+buf:[8]3=0
 bump:=0
 off:=0
 @i,8{

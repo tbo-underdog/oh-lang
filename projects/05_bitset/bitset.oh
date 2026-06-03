@@ -19,7 +19,7 @@ m:=1<<b
 ?(w[word]&m)==m{cnt=cnt+1}}}
 cnt}
 #main(){
-bits:[8]3=[0,0,0,0,0,0,0,0]
+bits:[8]3=0
 bset(bits,0) bset(bits,7) bset(bits,63) bset(bits,127) bset(bits,255)
 ?btest(bits,0)!=1{\1}
 ?btest(bits,7)!=1{\2}

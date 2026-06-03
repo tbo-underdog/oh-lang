@@ -1239,6 +1239,34 @@ static void emit_stmt(Stmt *s) {
                     fprintf(out, "  store %s ", llvm_scalar(t->inner->kind));
                     emit_ref(ev); fprintf(out, ", ptr %%t%d\n", ep);
                 }
+            } else if (s->vardecl.init) {
+                /* array fill: `name:[N]T = scalar`. Zero-fill uses a single
+                 * zeroinitializer store (clang -> memset); non-zero uses a loop. */
+                int fv = emit_expr(s->vardecl.init);
+                if (IS_CONST(fv) && const_table[CONST_IDX(fv)].ival == 0) {
+                    fprintf(out, "  store [%llu x ", (unsigned long long)t->array_size);
+                    emit_llvm_type(t->inner);
+                    fprintf(out, "] zeroinitializer, ptr %%v%d\n", vreg);
+                } else {
+                    int ci = new_reg();                 /* counter alloca */
+                    fprintf(out, "  %%v%d = alloca i32\n  store i32 0, ptr %%v%d\n", ci, ci);
+                    int lc = new_label(), lb = new_label(), le = new_label();
+                    fprintf(out, "  br label %%L%d\nL%d:\n", lc, lc);
+                    int c0 = new_reg();
+                    fprintf(out, "  %%t%d = load i32, ptr %%v%d\n", c0, ci);
+                    int cc = new_reg();
+                    fprintf(out, "  %%t%d = icmp slt i32 %%t%d, %llu\n", cc, c0, (unsigned long long)t->array_size);
+                    fprintf(out, "  br i1 %%t%d, label %%L%d, label %%L%d\nL%d:\n", cc, lb, le, lb);
+                    int ep = new_reg();
+                    fprintf(out, "  %%t%d = getelementptr [%llu x ", ep, (unsigned long long)t->array_size);
+                    emit_llvm_type(t->inner);
+                    fprintf(out, "], ptr %%v%d, i32 0, i32 %%t%d\n", vreg, c0);
+                    fprintf(out, "  store %s ", llvm_scalar(t->inner->kind)); emit_ref(fv);
+                    fprintf(out, ", ptr %%t%d\n", ep);
+                    int c1 = new_reg();
+                    fprintf(out, "  %%t%d = add i32 %%t%d, 1\n  store i32 %%t%d, ptr %%v%d\n", c1, c0, c1, ci);
+                    fprintf(out, "  br label %%L%d\nL%d:\n", lc, le);
+                }
             }
         } else {
             /* scalar: alloca in entry; just store the initialiser */

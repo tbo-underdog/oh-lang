@@ -379,6 +379,19 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
                     relit(al->arrlit.elems[i], dt->inner->kind, a);
                 it = dt; /* element-wise compatible now */
             }
+            /* array fill shorthand: `name:[N]T = scalar` fills all N elements.
+             * The scalar must match (coerce to) the element type. */
+            else if (dt->kind == TY_ARRAY && s->vardecl.init->kind != EX_ARRAYLIT) {
+                if (is_int_kind(dt->inner->kind)) {
+                    relit(s->vardecl.init, dt->inner->kind, a);
+                    widen(&s->vardecl.init, dt->inner, a);
+                }
+                if (!types_equal(s->vardecl.init->typ, dt->inner)) {
+                    fprintf(stderr, "Array fill value type mismatch for '%s'\n", s->vardecl.name);
+                    exit(1);
+                }
+                it = dt; /* fill is compatible */
+            }
             if (!types_equal(it, dt)) {
                 fprintf(stderr, "Type mismatch in var decl '%s'\n", s->vardecl.name);
                 exit(1);

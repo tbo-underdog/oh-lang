@@ -40,6 +40,7 @@ run 04_fibonacci  55 tests/04_fibonacci.oh
 run 05_max_array  5  tests/05_max_array.oh
 run 06_tailrec    128 tests/06_tailrec.oh
 run 07_compound   0  tests/07_compound.oh
+run 08_arrayfill  0  tests/08_arrayfill.oh
 
 echo "== projects (exit 0 = all internal assertions pass) =="
 run 01_hashmap        0 projects/01_hashmap/hashmap.oh

@@ -73,6 +73,7 @@ s}
 - `name:T=expr`       → declare with explicit type.
 - `name:T`            → declare **uninitialized** (e.g. `buf:[4096]1` scratch buffer).
 - `name=expr`         → assign existing variable.
+- **Array fill**: `name:[N]T = v` fills all N elements with scalar `v` (e.g. `buf:[256]1=0`).
 - **Compound assignment**: `+= -= *= /= &= |= ^=` on a variable, array element
   (`a[i]+=x`), or deref (`!p+=x`). Sugar for `x = x OP e`.
 - **Implicit integer widening**: a narrower int auto-widens to a wider one (i32→i64, etc.)
