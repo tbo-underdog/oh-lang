@@ -46,6 +46,9 @@ static void print_type(Type *t) {
         printf("[%llu]", (unsigned long long)t->array_size);
         print_type(t->inner);
         return;
+    case TY_STRUCT:
+        printf("%s", t->struct_name);
+        return;
     }
 }
 
@@ -200,6 +203,9 @@ static void print_expr(Expr *e) {
         printf(")");
         print_expr_paren(e->cast.operand, 8);
         return;
+    case EX_FIELD:
+        printf("%s.%s", e->field.var, e->field.field);
+        return;
     }
 }
 
@@ -333,6 +339,13 @@ static void print_stmt(Stmt *s) {
         printf(";\n");
         return;
 
+    case ST_FIELDASSIGN:
+        print_indent();
+        printf("%s.%s = ", s->fieldassign.var, s->fieldassign.field);
+        print_expr(s->fieldassign.rhs);
+        printf(";\n");
+        return;
+
     case ST_EXPRSTMT:
         print_indent();
         print_expr(s->exprstmt);
@@ -344,6 +357,16 @@ static void print_stmt(Stmt *s) {
 /* ------------------------------------------------------------------ */
 /* Function printing                                                    */
 /* ------------------------------------------------------------------ */
+
+static void print_struct(StructDef *sd) {
+    printf("struct %s {\n", sd->name);
+    for (size_t i = 0; i < sd->field_count; i++) {
+        printf("    %s: ", sd->field_names[i]);
+        print_type(sd->field_types[i]);
+        printf(";\n");
+    }
+    printf("}\n");
+}
 
 static void print_func(FuncDef *f) {
     printf("function %s(", f->name);
@@ -405,9 +428,13 @@ int main(int argc, char **argv) {
     /* Parse — no type-checking needed for pretty-printing */
     Program prog = parse(tokens, &a);
 
-    /* Pretty-print each function */
-    for (size_t i = 0; i < prog.func_count; i++) {
+    /* Pretty-print struct definitions first, then each function */
+    for (size_t i = 0; i < prog.struct_count; i++) {
         if (i > 0) printf("\n");
+        print_struct(&prog.structs[i]);
+    }
+    for (size_t i = 0; i < prog.func_count; i++) {
+        if (i > 0 || prog.struct_count > 0) printf("\n");
         print_func(&prog.funcs[i]);
     }
 
