@@ -192,8 +192,12 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
     case EX_FIELD: {
         Type *vt = lookup_var(ss, e->field.var);
         if (!vt) { fprintf(stderr, "Undeclared variable '%s'\n", e->field.var); exit(1); }
-        if (vt->kind != TY_STRUCT) { fprintf(stderr, "'%s' is not a struct\n", e->field.var); exit(1); }
-        e->typ = clone_type(a, struct_field_type(vt->struct_name, e->field.field));
+        /* `.` works on a struct value or a pointer-to-struct (auto-deref). */
+        const char *sn = NULL;
+        if (vt->kind == TY_STRUCT) sn = vt->struct_name;
+        else if (vt->kind == TY_PTR && vt->inner && vt->inner->kind == TY_STRUCT) sn = vt->inner->struct_name;
+        else { fprintf(stderr, "'%s' is not a struct\n", e->field.var); exit(1); }
+        e->typ = clone_type(a, struct_field_type(sn, e->field.field));
         return e->typ;
     }
     case EX_BINOP: {
@@ -323,6 +327,15 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
             bool compat = types_equal(at, pt);
             if (!compat && at->kind == TY_ARRAY && pt->kind == TY_PTR) {
                 compat = types_equal(at->inner, pt->inner);
+            }
+            // Allow struct-value-to-pointer decay: Struct -> *Struct (caller
+            // passes the struct's address, like arrays). Keeps the functional
+            // stdlib API call-site-clean (vec_push(v,...) not vec_push(&v,...)).
+            if (!compat && at->kind == TY_STRUCT && pt->kind == TY_PTR &&
+                pt->inner && pt->inner->kind == TY_STRUCT &&
+                at->struct_name && pt->inner->struct_name &&
+                strcmp(at->struct_name, pt->inner->struct_name)==0) {
+                compat = true;
             }
             if (!compat) {
                 fprintf(stderr, "Arg %zu type mismatch in call to '%s'\n", i, e->call.name);
@@ -479,8 +492,11 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
     case ST_FIELDASSIGN: {
         Type *vt = lookup_var(ss, s->fieldassign.var);
         if (!vt) { fprintf(stderr, "Undeclared var '%s'\n", s->fieldassign.var); exit(1); }
-        if (vt->kind != TY_STRUCT) { fprintf(stderr, "'%s' is not a struct\n", s->fieldassign.var); exit(1); }
-        Type *ft = struct_field_type(vt->struct_name, s->fieldassign.field);
+        const char *sn = NULL;
+        if (vt->kind == TY_STRUCT) sn = vt->struct_name;
+        else if (vt->kind == TY_PTR && vt->inner && vt->inner->kind == TY_STRUCT) sn = vt->inner->struct_name;
+        else { fprintf(stderr, "'%s' is not a struct\n", s->fieldassign.var); exit(1); }
+        Type *ft = struct_field_type(sn, s->fieldassign.field);
         Type *rt = infer(s->fieldassign.rhs, ss, a);
         if (is_int_kind(ft->kind) && relit(s->fieldassign.rhs, ft->kind, a)) rt = s->fieldassign.rhs->typ;
         if (is_int_kind(ft->kind)) { widen(&s->fieldassign.rhs, ft, a); rt = s->fieldassign.rhs->typ; }

@@ -643,6 +643,7 @@ static const char *llvm_scalar(TypeKind k) {
     case TY_VOID: return "void";
     case TY_PTR:  return "ptr";
     case TY_ARRAY: return "ptr"; /* arrays become ptr in arg/load position */
+    case TY_STRUCT: return "ptr"; /* struct value decays to its address in arg position */
     }
     return "i32";
 }
@@ -714,6 +715,30 @@ static int new_label(void){ return lbl_ctr++; }
 
 static int emit_expr(Expr *e);
 
+/* Resolve the base pointer of a struct variable for field access. Handles both:
+ *   v:Struct       — `v` is a local; base = its alloca address (%v<reg>)
+ *   v:*Struct      — `v` is a pointer-to-struct; base = the pointer VALUE
+ *                    (loaded from its slot, or the SSA reg for an unmutated param)
+ * Writes the struct type name into *out_sname and returns the register/ref that
+ * holds the base pointer; *is_vreg tells the caller whether it's a %v alloca
+ * (true) or a %t value (false). */
+static int struct_base_ref(int slot, const char **out_sname, int *is_vreg) {
+    Type *vt = var_slots[slot].type;
+    if (vt->kind == TY_PTR) {            /* pointer-to-struct: auto-deref */
+        *out_sname = vt->inner->struct_name;
+        *is_vreg = 0;
+        if (var_slots[slot].direct_reg >= 0)
+            return var_slots[slot].direct_reg;       /* pointer already in %t */
+        int p = new_reg();                           /* load the pointer */
+        fprintf(out, "  %%t%d = load ptr, ptr %%v%d\n", p, var_slots[slot].reg);
+        return p;
+    }
+    /* struct value held in a local alloca */
+    *out_sname = vt->struct_name;
+    *is_vreg = 1;
+    return var_slots[slot].reg;
+}
+
 /* Helper: emit an icmp for signed integer comparison, return result reg */
 static int emit_icmp(const char *pred, int lr, int rr, TypeKind k) {
     /* Constant-fold at compile time for integer comparisons */
@@ -771,7 +796,12 @@ static int emit_expr(Expr *e) {
         }
 
         int r = new_reg();
-        if (vt->kind == TY_ARRAY) {
+        if (vt->kind == TY_STRUCT) {
+            /* Struct value used as an r-value (passed to a *Struct param):
+             * decay to its address, like an array. */
+            fprintf(out, "  %%t%d = getelementptr i8, ptr %%v%d, i32 0\n",
+                    r, var_slots[idx].reg);
+        } else if (vt->kind == TY_ARRAY) {
             /* Arrays: the alloca holds [N x T].  When used as an r-value
              * (e.g. passed to a function expecting ^T) we return the ptr
              * directly — no load needed. */
@@ -790,14 +820,14 @@ static int emit_expr(Expr *e) {
     case EX_FIELD: {
         int idx = vars_lookup(e->field.var);
         assert(idx >= 0 && "unknown struct variable in emit_expr");
-        Type *vt = var_slots[idx].type;
-        assert(vt->kind == TY_STRUCT);
-        int fi = cg_field_index(vt->struct_name, e->field.field);
+        const char *sname; int is_vreg;
+        int base = struct_base_ref(idx, &sname, &is_vreg);
+        int fi = cg_field_index(sname, e->field.field);
         assert(fi >= 0 && "unknown struct field in emit_expr");
         /* GEP to the field, then load its value */
         int p = new_reg();
-        fprintf(out, "  %%t%d = getelementptr %%%s, ptr %%v%d, i32 0, i32 %d\n",
-                p, vt->struct_name, var_slots[idx].reg, fi);
+        fprintf(out, "  %%t%d = getelementptr %%%s, ptr %s%d, i32 0, i32 %d\n",
+                p, sname, is_vreg ? "%v" : "%t", base, fi);
         int r = new_reg();
         fprintf(out, "  %%t%d = load ", r);
         emit_llvm_type(e->typ);
@@ -1434,18 +1464,19 @@ static void emit_stmt(Stmt *s) {
     }
 
     case ST_FIELDASSIGN: {
-        /* var.field = rhs — GEP to the field, store */
+        /* var.field = rhs — GEP to the field, store. var may be a local struct
+         * value or a pointer-to-struct (auto-deref). */
         int rval = emit_expr(s->fieldassign.rhs);
         int slot = vars_lookup(s->fieldassign.var);
         assert(slot >= 0 && "unknown struct var in fieldassign");
-        Type *vt = var_slots[slot].type;
-        assert(vt->kind == TY_STRUCT);
-        int fi = cg_field_index(vt->struct_name, s->fieldassign.field);
+        const char *sname; int is_vreg;
+        int base = struct_base_ref(slot, &sname, &is_vreg);
+        int fi = cg_field_index(sname, s->fieldassign.field);
         assert(fi >= 0 && "unknown struct field in fieldassign");
         int p = new_reg();
-        fprintf(out, "  %%t%d = getelementptr %%%s, ptr %%v%d, i32 0, i32 %d\n",
-                p, vt->struct_name, var_slots[slot].reg, fi);
-        StructDef *sd = cg_lookup_struct(vt->struct_name);
+        fprintf(out, "  %%t%d = getelementptr %%%s, ptr %s%d, i32 0, i32 %d\n",
+                p, sname, is_vreg ? "%v" : "%t", base, fi);
+        StructDef *sd = cg_lookup_struct(sname);
         Type *ft = sd->field_types[fi];
         fprintf(out, "  store ");
         emit_llvm_type(ft);

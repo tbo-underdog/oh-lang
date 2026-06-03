@@ -44,6 +44,12 @@ the syntax; load it before generating Oh.
   is itself a type, usable for fields, locals, etc. Typed fields remove the
   cast noise of positional state arrays — bind a pointer field once
   (`k:=v.data`, `k` is typed `*3`) then index it directly (`k[i]`).
+  - Field access also works **through a pointer**: a `v:*Vec` parameter uses the
+    same `v.field` / `v.field=x` syntax (auto-deref, like C's `->`).
+  - A struct value **decays to its address** when passed to a `*Struct`
+    parameter (like an array → pointer). So a mutating, functional-style API
+    reads `vec_push(v, h, x)` at the call site (no `&`), with the callee taking
+    `v:*Vec`. This is how the `std/vec` and `std/map` state is passed.
 - Legacy long names (`i32`, `u8`, `f64`, …) are still accepted but the codes are preferred.
 
 ## 4. Functions

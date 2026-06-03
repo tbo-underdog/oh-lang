@@ -1,0 +1,15 @@
+$P{x:3 y:3}
+#bump(p:*P,d):v{
+p.x=p.x+d
+p.y=p.y+d}
+#dec(p:*P):v{p.x-=1}
+#main():3{
+q:P
+q.x=10
+q.y=20
+bump(&q,5)
+?q.x!=15{\1}
+?q.y!=25{\2}
+dec(q)
+?q.x!=14{\3}
+0}

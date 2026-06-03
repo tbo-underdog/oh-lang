@@ -1,7 +1,7 @@
 #main(){
 h:[3]6
 heap_new(h,67108864)
-m:[5]6
+m:Map
 map_new(m,h,2097152)
 @i,1000000{map_set(m,i,i*2)}
 s:=0

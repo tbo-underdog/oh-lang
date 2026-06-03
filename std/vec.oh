@@ -1,26 +1,26 @@
-// vec: growable i32 array on a heap (needs std/mem). State v:[3]6 = [data,len,cap].
-#vec_new(v:*6,h:*6,cap):v{
-v[0]=halloc(h,(cap*4))
-v[1]=0
-v[2]=cap}
-#vec_push(v:*6,h:*6,x):v{
-?v[1]>=v[2]{
-nc:=v[2]*2
-v[0]=hrealloc(h,v[0],v[2]*4,nc*4)
-v[2]=nc}
-d:=(*3)v[0]
-li:=(3)v[1]
-d[li]=x
-v[1]=v[1]+1}
-#vec_get(v:*6,i){
-d:=(*3)v[0]
+// vec: growable i32 array on a heap (needs std/mem). Struct-typed state — pass a
+// Vec value, it decays to *Vec. Typed `data` field removes the per-access cast.
+$Vec{data:*3 len:3 cap:3}
+#vec_new(v:*Vec,h:*6,cap):v{
+v.data=(*3)halloc(h,cap*4)
+v.len=0
+v.cap=cap}
+#vec_push(v:*Vec,h:*6,x):v{
+?v.len>=v.cap{
+nc:=v.cap*2
+v.data=(*3)hrealloc(h,(6)v.data,v.cap*4,nc*4)
+v.cap=nc}
+d:=v.data
+d[v.len]=x
+v.len=v.len+1}
+#vec_get(v:*Vec,i){
+d:=v.data
 d[i]}
-#vec_set(v:*6,i,x):v{
-d:=(*3)v[0]
+#vec_set(v:*Vec,i,x):v{
+d:=v.data
 d[i]=x}
-#vec_len(v:*6)(3)v[1]
-#vec_pop(v:*6){
-v[1]=v[1]-1
-d:=(*3)v[0]
-li:=(3)v[1]
-d[li]}
+#vec_len(v:*Vec)v.len
+#vec_pop(v:*Vec){
+v.len=v.len-1
+d:=v.data
+d[v.len]}

@@ -1,43 +1,45 @@
 // map: fixed-capacity int->int hash map on a heap (open addressing, linear probe).
-// Needs std/mem. State m:[5]6 = [keys, vals, flags, count, cap]. cap must be a
-// power of two and exceed the number of entries. map_get/has return -1/0 if absent.
-#map_new(m:*6,h:*6,cap):v{
-m[0]=halloc(h,(cap*4))
-m[1]=halloc(h,(cap*4))
-m[2]=halloc(h,cap)
-fl:=(*1)m[2]
+// Needs std/mem. Struct-typed state — pass a Map value, it decays to *Map. Typed
+// pointer fields remove the per-access casts. cap must be a power of two and
+// exceed the number of entries. map_get/has return -1/0 if absent.
+$Map{keys:*3 vals:*3 flags:*1 count:3 cap:3}
+#map_new(m:*Map,h:*6,cap):v{
+m.keys=(*3)halloc(h,cap*4)
+m.vals=(*3)halloc(h,cap*4)
+m.flags=(*1)halloc(h,cap)
+fl:=m.flags
 @i,cap{fl[i]=0}
-m[3]=0
-m[4]=cap}
-#map_set(m:*6,k,v):v{
-cap:=(3)m[4]
-keys:=(*3)m[0]
-vals:=(*3)m[1]
-fl:=(*1)m[2]
+m.count=0
+m.cap=cap}
+#map_set(m:*Map,k,v):v{
+cap:=m.cap
+keys:=m.keys
+vals:=m.vals
+fl:=m.flags
 i:=k&(cap-1)
 ~fl[i]==1&&keys[i]!=k{i=(i+1)&(cap-1)}
 ?fl[i]==0{
 fl[i]=1
-m[3]=m[3]+1}
+m.count=m.count+1}
 keys[i]=k
 vals[i]=v}
-#map_get(m:*6,k){
-cap:=(3)m[4]
-keys:=(*3)m[0]
-vals:=(*3)m[1]
-fl:=(*1)m[2]
+#map_get(m:*Map,k){
+cap:=m.cap
+keys:=m.keys
+vals:=m.vals
+fl:=m.flags
 i:=k&(cap-1)
 ~fl[i]==1{
 ?keys[i]==k{\vals[i]}
 i=(i+1)&(cap-1)}
 -1}
-#map_has(m:*6,k){
-cap:=(3)m[4]
-keys:=(*3)m[0]
-fl:=(*1)m[2]
+#map_has(m:*Map,k){
+cap:=m.cap
+keys:=m.keys
+fl:=m.flags
 i:=k&(cap-1)
 ~fl[i]==1{
 ?keys[i]==k{\1}
 i=(i+1)&(cap-1)}
 0}
-#map_count(m:*6)(3)m[3]
+#map_count(m:*Map)m.count
