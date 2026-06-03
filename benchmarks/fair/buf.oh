@@ -1,7 +1,7 @@
 #main(){
 h:[3]6
 heap_new(h,134217728)
-b:[3]6
-buf_new(b,h,16)
-@i,1000000{buf_int(b,h,i&255)}
+b:Buf
+buf_new(b,h,4000000)
+@i,1000000{buf_int(b,i&255)}
 buf_len(b)&255}
