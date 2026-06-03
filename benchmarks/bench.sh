@@ -37,13 +37,25 @@ def best(p,r=4):
         try: t=time.perf_counter(); subprocess.run([p],capture_output=True,timeout=120); b=min(b,time.perf_counter()-t)
         except Exception: return None
     return b
+import re
 def src_toks(files):
-    n=0
+    # reachable-only: count tokens of just the functions reachable from main
+    funcs={}
     for f in files.split():
-        if os.path.exists(f):
-            s="\n".join(l for l in open(f).read().splitlines() if not l.strip().startswith("//"))
-            n+=tok(s)
-    return n
+        if not os.path.exists(f): continue
+        txt="\n".join(l for l in open(f).read().splitlines() if not l.strip().startswith("//"))
+        for p in re.split(r"(?m)^(?=#)", txt):
+            m=re.match(r"#([A-Za-z_][A-Za-z0-9_]*)", p)
+            if m: funcs[m.group(1)]=p
+    names=set(funcs); seen=set(); stack=["main"]
+    while stack:
+        nm=stack.pop()
+        if nm in seen or nm not in funcs: continue
+        seen.add(nm); body=funcs[nm]
+        for c in names:
+            if c!=nm and re.search(r"(?<![A-Za-z0-9_])"+re.escape(c)+r"\(", body) and c not in seen:
+                stack.append(c)
+    return sum(tok(funcs[nm]) for nm in seen)
 rows=[]
 for ohf in sorted(glob.glob("benchmarks/fair/*.oh")):
     name=os.path.basename(ohf)[:-3]
@@ -71,6 +83,7 @@ for r in rows:
     print(f"{name:<11}{oht:>6}{ct:>6}{tokd:>7}  {ot:>8.4f}{cct:>8.4f}{pr:>6.2f}x")
 print("-"*54)
 print(f"tokens <= C: {twin}/{tot}   perf <= C: {pwin}/{tot}")
-print("note: stdlib rows (vec/map/buf/json) count the FULL reusable module vs C's")
-print("inline code — conservative against Oh (the module is written once, amortized).")
+print("note: token counts are reachable-only (functions used from main). stdlib rows")
+print("(vec/map/buf/json) still include Oh's heap allocator (C gets malloc FREE from libc)")
+print("plus i64<->i32 cast verbosity — both shrink with implicit widening + a struct type.")
 PYEOF
