@@ -1,15 +1,14 @@
-// vec: growable i32 array on a heap (needs std/mem). Struct-typed state — pass a
-// Vec value, it decays to *Vec. Typed `data` field removes the per-access cast.
+// vec: fixed-capacity i32 array on a heap (needs std/mem). Size is chosen at
+// creation (vec_new cap) — the Oh model: you know the size when you make it.
+// push does NOT grow (no heap param, no realloc, no orphan-leak path); it aborts
+// (137) if you exceed cap. That keeps the hot path a branchless store+increment.
 $Vec{data:*3 len:3 cap:3}
 #vec_new(v:*Vec,h:*6,cap):v{
-v.data=(*3)halloc(h,cap*4)
+v.data=(*3)halloc(h,(6)cap*4)
 v.len=0
 v.cap=cap}
-#vec_push(v:*Vec,h:*6,x):v{
-?v.len>=v.cap{
-nc:=v.cap*2
-v.data=(*3)hrealloc(h,(6)v.data,v.cap*4,nc*4)
-v.cap=nc}
+#vec_push(v:*Vec,x):v{
+?v.len>=v.cap{sys(60,137)}
 d:=v.data
 d[v.len]=x
 v.len=v.len+1}

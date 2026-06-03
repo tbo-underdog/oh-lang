@@ -2,8 +2,8 @@
 h:[3]6
 heap_new(h,65536)
 v:Vec
-vec_new(v,h,2)
-@i,10{vec_push(v,h,i*i)}
+vec_new(v,h,10)
+@i,10{vec_push(v,i*i)}
 ?vec_len(v)!=10{\1}
 ?vec_get(v,5)!=25{\2}
 ?vec_get(v,9)!=81{\3}
