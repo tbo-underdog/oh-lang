@@ -69,6 +69,13 @@ run 11_simd       0  tests/11_simd.oh
 run 12_ptrstruct  0  tests/12_ptrstruct.oh
 run 13_mem_safety 0  std/mem.oh tests/13_mem_safety.oh
 run 14_oom        137 std/mem.oh tests/14_oom.oh
+run 16_pointers   0  tests/16_pointers.oh
+run 17_ternary    0  tests/17_ternary.oh
+run 18_arith      0  tests/18_arith.oh
+run 19_alloc      0  std/mem.oh tests/19_alloc.oh
+run 20_stdlib     0  std/core.oh std/mem.oh std/map.oh std/buf.oh std/math.oh tests/20_stdlib.oh
+run 21_vecfull    137 std/mem.oh std/vec.oh tests/21_vecfull.oh
+run 22_mapfull    137 std/mem.oh std/map.oh tests/22_mapfull.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh

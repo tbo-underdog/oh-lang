@@ -851,7 +851,12 @@ static int emit_expr(Expr *e) {
         case OP_ADD: {
             int fold = IFOLD2(+); if (fold != -1) return fold;
             if (lk == TY_PTR) {
-                fprintf(out, "  %%t%d = getelementptr i8, ptr %%t%d, i32 ", res, lr);
+                /* element-scaled pointer arithmetic (C semantics): p+n advances
+                 * n elements of the pointee type, not n bytes. */
+                Type *pe = e->binop.lhs->typ->inner;
+                fprintf(out, "  %%t%d = getelementptr ", res);
+                if (pe) emit_llvm_type(pe); else fprintf(out, "i8");
+                fprintf(out, ", ptr %%t%d, i32 ", lr);
                 emit_ref(rr); fprintf(out, "\n");
             } else if (is_float) {
                 fprintf(out, "  %%t%d = fadd %s ", res, llvm_scalar(lk));
@@ -868,7 +873,10 @@ static int emit_expr(Expr *e) {
                 int neg_rr;
                 if (IS_CONST(rr)) neg_rr = new_iconst(-const_table[CONST_IDX(rr)].ival);
                 else { neg_rr = new_reg(); fprintf(out,"  %%t%d = sub i32 0, %%t%d\n",neg_rr,rr); }
-                fprintf(out, "  %%t%d = getelementptr i8, ptr %%t%d, i32 ", res, lr);
+                Type *pe = e->binop.lhs->typ->inner;
+                fprintf(out, "  %%t%d = getelementptr ", res);
+                if (pe) emit_llvm_type(pe); else fprintf(out, "i8");
+                fprintf(out, ", ptr %%t%d, i32 ", lr);
                 emit_ref(neg_rr); fprintf(out, "\n");
             } else if (is_float) {
                 fprintf(out, "  %%t%d = fsub %s ", res, llvm_scalar(lk));
@@ -956,6 +964,60 @@ static int emit_expr(Expr *e) {
     }
 
     case EX_UNOP: {
+        /* Address-of computes a *location*, not a value — handle it before the
+         * eager operand emit so we don't load (and don't evaluate an index twice).
+         * Supports &name, &arr[i], and &struct.field. */
+        if (e->unop.op == UOP_ADDROF) {
+            Expr *op = e->unop.operand;
+            if (op->kind == EX_IDENT) {
+                int idx = vars_lookup(op->ident);
+                assert(idx >= 0 && "unknown variable in address-of");
+                int r = new_reg();
+                fprintf(out, "  %%t%d = getelementptr i8, ptr %%v%d, i32 0\n",
+                        r, var_slots[idx].reg);
+                return r;
+            }
+            if (op->kind == EX_ARRAYIDX) {
+                int slot = vars_lookup(op->arridx.name);
+                assert(slot >= 0 && "unknown array in address-of");
+                Type *vt = var_slots[slot].type;
+                TypeKind ek = vt->inner ? vt->inner->kind : TY_I32;
+                int idx_reg = emit_expr(op->arridx.idx);
+                int r = new_reg();
+                if (vt->kind == TY_ARRAY) {
+                    fprintf(out, "  %%t%d = getelementptr [%llu x ",
+                            r, (unsigned long long)vt->array_size);
+                    emit_llvm_type(vt->inner);
+                    fprintf(out, "], ptr %%v%d, i32 0, i32 ", var_slots[slot].reg);
+                    emit_ref(idx_reg); fprintf(out, "\n");
+                } else if (var_slots[slot].direct_reg >= 0) {
+                    fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+                            r, llvm_scalar(ek), var_slots[slot].direct_reg);
+                    emit_ref(idx_reg); fprintf(out, "\n");
+                } else {
+                    int loaded = new_reg();
+                    fprintf(out, "  %%t%d = load ptr, ptr %%v%d\n", loaded, var_slots[slot].reg);
+                    fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+                            r, llvm_scalar(ek), loaded);
+                    emit_ref(idx_reg); fprintf(out, "\n");
+                }
+                return r;
+            }
+            if (op->kind == EX_FIELD) {
+                int slot = vars_lookup(op->field.var);
+                assert(slot >= 0 && "unknown struct in address-of");
+                const char *sname; int is_vreg;
+                int base = struct_base_ref(slot, &sname, &is_vreg);
+                int fi = cg_field_index(sname, op->field.field);
+                assert(fi >= 0 && "unknown field in address-of");
+                int r = new_reg();
+                fprintf(out, "  %%t%d = getelementptr %%%s, ptr %s%d, i32 0, i32 %d\n",
+                        r, sname, is_vreg ? "%v" : "%t", base, fi);
+                return r;
+            }
+            fprintf(stderr, "address-of requires a variable, array element, or field\n");
+            exit(1);
+        }
         int or_reg = emit_expr(e->unop.operand);
         TypeKind ok = e->unop.operand->typ->kind;
         switch (e->unop.op) {
@@ -987,16 +1049,9 @@ static int emit_expr(Expr *e) {
             fprintf(out, ", -1\n");
             return r;
         }
-        case UOP_ADDROF: {
-            /* &name → return the alloca ptr of the variable */
-            assert(e->unop.operand->kind == EX_IDENT);
-            int idx = vars_lookup(e->unop.operand->ident);
-            assert(idx >= 0);
-            int r = new_reg();
-            fprintf(out, "  %%t%d = getelementptr i8, ptr %%v%d, i32 0\n",
-                    r, var_slots[idx].reg);
-            return r;
-        }
+        case UOP_ADDROF:
+            /* handled above, before the eager operand emit */
+            break;
         case UOP_DEREF: {
             /* *ptr → load through the pointer value */
             int r = new_reg();

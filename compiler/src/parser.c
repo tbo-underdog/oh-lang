@@ -184,9 +184,11 @@ static Expr *parse_ternary(Parser *p) {
     Expr *lhs = parse_logor(p);
     if (check(p, TK_QUESTION)) {
         advance(p);
-        Expr *then_e = parse_logor(p);
+        /* branches parse as full ternaries -> nesting + right-associativity:
+         * a?b:c?d:e == a?b:(c?d:e); a?b?c:d:e == a?(b?c:d):e */
+        Expr *then_e = parse_ternary(p);
         expect(p, TK_COLON);
-        Expr *else_e = parse_logor(p);
+        Expr *else_e = parse_ternary(p);
         Expr *e = new_expr(p, EX_TERNARY);
         e->ternary.cond   = lhs;
         e->ternary.then_e = then_e;

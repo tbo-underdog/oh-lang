@@ -1,0 +1,10 @@
+#main(){
+h:[3]6
+heap_new(h,65536)
+m:Map
+map_new(m,h,4)
+map_set(m,0,0)
+map_set(m,1,1)
+map_set(m,2,2)
+map_set(m,3,3)
+0}
