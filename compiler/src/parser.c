@@ -1,6 +1,13 @@
 #include "parser.h"
 
-typedef struct { Token *tokens; size_t len; size_t pos; Arena *a; } Parser;
+typedef struct { Token *tokens; size_t len; size_t pos; Arena *a;
+                 char **struct_names; size_t struct_name_count; } Parser;
+
+static bool is_struct_name(Parser *p, const char *s) {
+    for (size_t i=0;i<p->struct_name_count;i++)
+        if (strcmp(p->struct_names[i],s)==0) return true;
+    return false;
+}
 
 static Token  peek(Parser *p)         { return p->tokens[p->pos]; }
 static TokenKind peekk(Parser *p)     { return p->tokens[p->pos].kind; }
@@ -44,6 +51,11 @@ static Type *parse_type(Parser *p) {
     }
     /* Identifier type codes: f=f32 d=f64 b=bool v=void */
     if (check(p, TK_IDENT)) {
+        /* struct name? */
+        if (is_struct_name(p, peek(p).text)) {
+            Token tn = advance(p);
+            t->kind = TY_STRUCT; t->struct_name = tn.text; return t;
+        }
         Token tn = advance(p);
         if      (strcmp(tn.text,"f")==0) t->kind=TY_F32;
         else if (strcmp(tn.text,"d")==0) t->kind=TY_F64;
@@ -298,6 +310,11 @@ static Expr *parse_primary(Parser *p) {
             advance(p); Expr *idx=parse_expr(p); expect(p,TK_RBRACKET);
             Expr *e=new_expr(p,EX_ARRAYIDX); e->arridx.name=t.text; e->arridx.idx=idx; return e;
         }
+        /* Struct field read: var . field */
+        if (check(p,TK_DOT)) {
+            advance(p); Token f=expect(p,TK_IDENT);
+            Expr *e=new_expr(p,EX_FIELD); e->field.var=t.text; e->field.field=f.text; return e;
+        }
         /* Plain identifier */
         Expr *e=new_expr(p,EX_IDENT); e->ident=t.text; return e;
     }
@@ -487,6 +504,27 @@ static Stmt *parse_stmt(Parser *p) {
             s->kind=ST_VARDECL; s->vardecl.name=nm.text; s->vardecl.typ=typ; s->vardecl.init=init; break;
         }
 
+        /* var . field [OP]= expr — struct field assignment (only when an
+         * assignment follows; otherwise it's a field-read expression stmt). */
+        if(check(p,TK_DOT)) {
+            advance(p); Token f=expect(p,TK_IDENT);
+            BinOp cop;
+            if(compound_op(p,&cop)) {
+                Expr *rhs=parse_expr(p); match(p,TK_SEMI);
+                Expr *load=new_expr(p,EX_FIELD); load->field.var=nm.text; load->field.field=f.text;
+                Expr *comb=new_expr(p,EX_BINOP); comb->binop.op=cop; comb->binop.lhs=load; comb->binop.rhs=rhs;
+                s->kind=ST_FIELDASSIGN; s->fieldassign.var=nm.text; s->fieldassign.field=f.text; s->fieldassign.rhs=comb; break;
+            }
+            if(check(p,TK_EQ)) {
+                advance(p); Expr *rhs=parse_expr(p); match(p,TK_SEMI);
+                s->kind=ST_FIELDASSIGN; s->fieldassign.var=nm.text; s->fieldassign.field=f.text; s->fieldassign.rhs=rhs; break;
+            }
+            /* not an assignment — field read used in an expression statement */
+            p->pos=saved;
+            Expr *e=parse_expr(p); match(p,TK_SEMI);
+            s->kind=ST_EXPRSTMT; s->exprstmt=e; break;
+        }
+
         /* name OP= expr — compound assignment -> name = name OP expr */
         { BinOp cop;
           if(compound_op(p,&cop)) {
@@ -633,15 +671,53 @@ static FuncDef parse_funcdef(Parser *p) {
     return f;
 }
 
+/* ---- Struct definition parsing ----
+ * $Name{ field:type field:type ... }   (commas optional)
+ */
+static StructDef parse_structdef(Parser *p) {
+    expect(p,TK_DOLLAR);
+    Token name=expect(p,TK_IDENT);
+    /* register the name immediately so fields/later code can reference it */
+    p->struct_names=(char**)realloc(p->struct_names,(p->struct_name_count+1)*sizeof(char*));
+    p->struct_names[p->struct_name_count++]=name.text;
+    expect(p,TK_LBRACE);
+    DYNARRAY(char*) fnames={0};
+    DYNARRAY(Type*) ftypes={0};
+    while(!check(p,TK_RBRACE)&&!check(p,TK_EOF)) {
+        while(check(p,TK_SEMI)||check(p,TK_COMMA)) advance(p);
+        if(check(p,TK_RBRACE)) break;
+        Token fn=expect(p,TK_IDENT);
+        expect(p,TK_COLON);
+        Type *ft=parse_type(p);
+        DA_PUSH(&fnames,fn.text,p->a);
+        DA_PUSH(&ftypes,ft,p->a);
+        while(check(p,TK_SEMI)||check(p,TK_COMMA)) advance(p);
+    }
+    expect(p,TK_RBRACE);
+    StructDef sd; sd.name=name.text;
+    sd.field_names=fnames.data; sd.field_types=ftypes.data; sd.field_count=fnames.len;
+    return sd;
+}
+
 Program parse(TokenArray tokens, Arena *a) {
-    Parser p={.tokens=tokens.data,.len=tokens.len,.pos=0,.a=a};
+    Parser p={.tokens=tokens.data,.len=tokens.len,.pos=0,.a=a,
+              .struct_names=NULL,.struct_name_count=0};
     DYNARRAY(FuncDef) funcs={0};
+    DYNARRAY(StructDef) structs={0};
     while(!check(&p,TK_EOF)){
         /* Skip stray semicolons at top level */
         while(check(&p,TK_SEMI)) advance(&p);
         if(check(&p,TK_EOF)) break;
+        if(check(&p,TK_DOLLAR)) {
+            StructDef sd=parse_structdef(&p);
+            DA_PUSH(&structs,sd,&p);
+            continue;
+        }
         FuncDef f=parse_funcdef(&p);
         DA_PUSH(&funcs,f,&p);
     }
-    Program prog; prog.funcs=funcs.data; prog.func_count=funcs.len; return prog;
+    Program prog;
+    prog.funcs=funcs.data; prog.func_count=funcs.len;
+    prog.structs=structs.data; prog.struct_count=structs.len;
+    return prog;
 }

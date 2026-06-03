@@ -43,6 +43,8 @@ typedef enum {
     TK_AMPAMP,     // &&
     TK_PIPEPIPE,   // ||
     TK_COLONEQ,    // :=  — type-inferred declaration
+    TK_DOT,        // .   — struct field access
+    TK_DOLLAR,     // $   — struct definition
 
     TK_IDENT,
     TK_INTLIT,

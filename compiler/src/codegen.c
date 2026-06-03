@@ -153,6 +153,7 @@ static void collect_strings_stmts(Stmt **body, size_t n) {
         case ST_IDXASSIGN:
             collect_strings_expr(s->idxassign.idx);
             collect_strings_expr(s->idxassign.rhs); break;
+        case ST_FIELDASSIGN: collect_strings_expr(s->fieldassign.rhs); break;
         case ST_RETURN:      collect_strings_expr(s->ret.val); break;
         case ST_EXPRSTMT:    collect_strings_expr(s->exprstmt); break;
         case ST_IF:
@@ -613,6 +614,23 @@ static int is_signed_int(TypeKind k) {
     return k==TY_I8||k==TY_I16||k==TY_I32||k==TY_I64;
 }
 
+/* Struct registry (set in codegen()) for field index/type lookup */
+static StructDef *cg_structs = NULL;
+static size_t     cg_struct_count = 0;
+static StructDef *cg_lookup_struct(const char *name) {
+    for (size_t i = 0; i < cg_struct_count; i++)
+        if (strcmp(cg_structs[i].name, name) == 0) return &cg_structs[i];
+    return NULL;
+}
+/* Field index within a struct (0-based GEP index); -1 if not found */
+static int cg_field_index(const char *sname, const char *fname) {
+    StructDef *sd = cg_lookup_struct(sname);
+    if (!sd) return -1;
+    for (size_t i = 0; i < sd->field_count; i++)
+        if (strcmp(sd->field_names[i], fname) == 0) return (int)i;
+    return -1;
+}
+
 /* Write a full LLVM type expression (for alloca / getelementptr etc.) */
 static void emit_llvm_type(Type *t) {
     switch (t->kind) {
@@ -633,6 +651,9 @@ static void emit_llvm_type(Type *t) {
         fprintf(out, "[%llu x ", (unsigned long long)t->array_size);
         emit_llvm_type(t->inner);
         fprintf(out, "]");
+        return;
+    case TY_STRUCT:
+        fprintf(out, "%%%s", t->struct_name);
         return;
     }
 }
@@ -723,6 +744,24 @@ static int emit_expr(Expr *e) {
             fprintf(out, "  %%t%d = load %s, ptr %%v%d\n",
                     r, llvm_scalar(vt->kind), var_slots[idx].reg);
         }
+        return r;
+    }
+
+    case EX_FIELD: {
+        int idx = vars_lookup(e->field.var);
+        assert(idx >= 0 && "unknown struct variable in emit_expr");
+        Type *vt = var_slots[idx].type;
+        assert(vt->kind == TY_STRUCT);
+        int fi = cg_field_index(vt->struct_name, e->field.field);
+        assert(fi >= 0 && "unknown struct field in emit_expr");
+        /* GEP to the field, then load its value */
+        int p = new_reg();
+        fprintf(out, "  %%t%d = getelementptr %%%s, ptr %%v%d, i32 0, i32 %d\n",
+                p, vt->struct_name, var_slots[idx].reg, fi);
+        int r = new_reg();
+        fprintf(out, "  %%t%d = load ", r);
+        emit_llvm_type(e->typ);
+        fprintf(out, ", ptr %%t%d\n", p);
         return r;
     }
 
@@ -1337,6 +1376,26 @@ static void emit_stmt(Stmt *s) {
         break;
     }
 
+    case ST_FIELDASSIGN: {
+        /* var.field = rhs — GEP to the field, store */
+        int rval = emit_expr(s->fieldassign.rhs);
+        int slot = vars_lookup(s->fieldassign.var);
+        assert(slot >= 0 && "unknown struct var in fieldassign");
+        Type *vt = var_slots[slot].type;
+        assert(vt->kind == TY_STRUCT);
+        int fi = cg_field_index(vt->struct_name, s->fieldassign.field);
+        assert(fi >= 0 && "unknown struct field in fieldassign");
+        int p = new_reg();
+        fprintf(out, "  %%t%d = getelementptr %%%s, ptr %%v%d, i32 0, i32 %d\n",
+                p, vt->struct_name, var_slots[slot].reg, fi);
+        StructDef *sd = cg_lookup_struct(vt->struct_name);
+        Type *ft = sd->field_types[fi];
+        fprintf(out, "  store ");
+        emit_llvm_type(ft);
+        fprintf(out, " "); emit_ref(rval); fprintf(out, ", ptr %%t%d\n", p);
+        break;
+    }
+
     case ST_RETURN: {
         if (!s->ret.val) {
             fprintf(out, "  ret void\n");
@@ -1525,6 +1584,8 @@ static void hoist_one(Type *t, int *out_reg) {
         fprintf(out, "  %%v%d = alloca [%llu x ", reg, (unsigned long long)t->array_size);
         emit_llvm_type(t->inner);
         fprintf(out, "]\n");
+    } else if (t->kind == TY_STRUCT) {
+        fprintf(out, "  %%v%d = alloca %%%s\n", reg, t->struct_name);
     } else {
         fprintf(out, "  %%v%d = alloca %s\n", reg, llvm_scalar(t->kind));
     }
@@ -1726,6 +1787,8 @@ void codegen(Program *prog, const char *out_ll_path, TargetTriple target) {
     g_target = target;
     lbl_ctr = 0;
     str_count = 0; /* reset string table for this compilation unit */
+    cg_structs = prog->structs;
+    cg_struct_count = prog->struct_count;
     compute_purity(prog);      /* interprocedural purity for memory(none) */
     compute_willreturn(prog);  /* termination analysis for willreturn/mustprogress */
 
@@ -1739,6 +1802,18 @@ void codegen(Program *prog, const char *out_ll_path, TargetTriple target) {
     fprintf(out, "; Oh LLVM IR\n");
     fprintf(out, "target datalayout = \"%s\"\n", target_datalayout(target));
     fprintf(out, "target triple = \"%s\"\n\n", target_llvm_triple(target));
+
+    /* Emit struct type definitions: %Name = type { field-types... } */
+    for (size_t i = 0; i < prog->struct_count; i++) {
+        StructDef *sd = &prog->structs[i];
+        fprintf(out, "%%%s = type { ", sd->name);
+        for (size_t j = 0; j < sd->field_count; j++) {
+            if (j > 0) fprintf(out, ", ");
+            emit_llvm_type(sd->field_types[j]);
+        }
+        fprintf(out, " }\n");
+    }
+    if (prog->struct_count) fprintf(out, "\n");
 
     /* Emit string literal globals (.rodata) */
     emit_string_globals();

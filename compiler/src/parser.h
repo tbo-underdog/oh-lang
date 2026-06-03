@@ -10,6 +10,7 @@ typedef enum {
     TY_VOID,
     TY_PTR,
     TY_ARRAY,
+    TY_STRUCT,
 } TypeKind;
 
 typedef struct Type Type;
@@ -17,6 +18,7 @@ struct Type {
     TypeKind kind;
     Type    *inner;       // for PTR and ARRAY
     uint64_t array_size;  // for ARRAY
+    char    *struct_name; // for STRUCT
 };
 
 // ---- Expressions ----
@@ -31,6 +33,7 @@ typedef enum {
     EX_ARRAYIDX,
     EX_CAST,
     EX_TERNARY,     /* cond ? then : else — value expression */
+    EX_FIELD,       /* var.field — struct field read */
 } ExprKind;
 
 typedef enum {
@@ -65,6 +68,7 @@ struct Expr {
         struct { char *name; Expr *idx; } arridx;
         struct { Type *to; Expr *operand; } cast;
         struct { Expr *cond; Expr *then_e; Expr *else_e; } ternary; /* EX_TERNARY */
+        struct { char *var; char *field; } field; /* EX_FIELD: var.field */
     };
 };
 
@@ -74,6 +78,7 @@ typedef enum {
     ST_ASSIGN,
     ST_DEREFASSIGN,
     ST_IDXASSIGN,   /* name%idx = rhs — store through pointer or array at index */
+    ST_FIELDASSIGN, /* var.field = rhs — store to struct field */
     ST_RETURN,
     ST_IF,
     ST_FOR,
@@ -89,6 +94,7 @@ struct Stmt {
         struct { char *name; Expr *rhs; } assign;
         struct { char *name; Expr *rhs; } derefassign;
         struct { char *name; Expr *idx; Expr *rhs; } idxassign; /* ST_IDXASSIGN */
+        struct { char *var; char *field; Expr *rhs; } fieldassign; /* ST_FIELDASSIGN */
         struct { Expr *val; } ret;   // val may be NULL for void return
         struct {
             Expr  *cond;
@@ -126,8 +132,17 @@ typedef struct {
 } FuncDef;
 
 typedef struct {
-    FuncDef *funcs;
-    size_t   func_count;
+    char   *name;
+    char  **field_names;
+    Type  **field_types;
+    size_t  field_count;
+} StructDef;
+
+typedef struct {
+    FuncDef   *funcs;
+    size_t     func_count;
+    StructDef *structs;
+    size_t     struct_count;
 } Program;
 
 Program parse(TokenArray tokens, Arena *a);

@@ -45,6 +45,8 @@ const char *token_kind_name(TokenKind k) {
     case TK_AMPAMP: return "&&";
     case TK_PIPEPIPE: return "||";
     case TK_COLONEQ: return ":=";
+    case TK_DOT: return ".";
+    case TK_DOLLAR: return "$";
     case TK_IDENT: return "IDENT";
     case TK_INTLIT: return "INT";
     case TK_FLOATLIT: return "FLOAT";
@@ -141,6 +143,8 @@ TokenArray lex(const char *src, Arena *a) {
         case '=': sk = TK_EQ;       break;
         case '<': sk = TK_LT;       break;
         case '>': sk = TK_GT;       break;
+        case '.': sk = TK_DOT;      break;
+        case '$': sk = TK_DOLLAR;   break;
         default:  single = false;   break;
         }
         if (single) {

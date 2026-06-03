@@ -117,6 +117,22 @@ typedef struct {
 static FuncSig func_table[MAX_FUNCS];
 static size_t  func_count = 0;
 
+/* Struct registry (set up in typecheck() before checking bodies) */
+static StructDef *g_structs = NULL;
+static size_t     g_struct_count = 0;
+static StructDef *lookup_struct(const char *name) {
+    for (size_t i = 0; i < g_struct_count; i++)
+        if (strcmp(g_structs[i].name, name) == 0) return &g_structs[i];
+    return NULL;
+}
+static Type *struct_field_type(const char *sname, const char *fname) {
+    StructDef *sd = lookup_struct(sname);
+    if (!sd) { fprintf(stderr, "Unknown struct '%s'\n", sname); exit(1); }
+    for (size_t i = 0; i < sd->field_count; i++)
+        if (strcmp(sd->field_names[i], fname) == 0) return sd->field_types[i];
+    fprintf(stderr, "Struct '%s' has no field '%s'\n", sname, fname); exit(1);
+}
+
 static void push_scope(ScopeStack *ss) {
     if (ss->depth >= MAX_SCOPES) { fprintf(stderr, "Scope overflow\n"); exit(1); }
     ss->scopes[ss->depth].count = 0;
@@ -171,6 +187,13 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
         Type *t = lookup_var(ss, e->ident);
         if (!t) { fprintf(stderr, "Undeclared variable '%s'\n", e->ident); exit(1); }
         e->typ = clone_type(a, t);
+        return e->typ;
+    }
+    case EX_FIELD: {
+        Type *vt = lookup_var(ss, e->field.var);
+        if (!vt) { fprintf(stderr, "Undeclared variable '%s'\n", e->field.var); exit(1); }
+        if (vt->kind != TY_STRUCT) { fprintf(stderr, "'%s' is not a struct\n", e->field.var); exit(1); }
+        e->typ = clone_type(a, struct_field_type(vt->struct_name, e->field.field));
         return e->typ;
     }
     case EX_BINOP: {
@@ -444,6 +467,23 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
         }
         break;
     }
+    case ST_FIELDASSIGN: {
+        Type *vt = lookup_var(ss, s->fieldassign.var);
+        if (!vt) { fprintf(stderr, "Undeclared var '%s'\n", s->fieldassign.var); exit(1); }
+        if (vt->kind != TY_STRUCT) { fprintf(stderr, "'%s' is not a struct\n", s->fieldassign.var); exit(1); }
+        Type *ft = struct_field_type(vt->struct_name, s->fieldassign.field);
+        Type *rt = infer(s->fieldassign.rhs, ss, a);
+        if (is_int_kind(ft->kind) && relit(s->fieldassign.rhs, ft->kind, a)) rt = s->fieldassign.rhs->typ;
+        if (is_int_kind(ft->kind)) { widen(&s->fieldassign.rhs, ft, a); rt = s->fieldassign.rhs->typ; }
+        /* array rvalue decays to a pointer to its element type */
+        if (ft->kind == TY_PTR && rt->kind == TY_ARRAY && types_equal(ft->inner, rt->inner))
+            rt = ft;
+        if (!types_equal(rt, ft)) {
+            fprintf(stderr, "Type mismatch in field assign '%s.%s'\n", s->fieldassign.var, s->fieldassign.field);
+            exit(1);
+        }
+        break;
+    }
     case ST_RETURN: {
         if (s->ret.val) {
             Type *vt = infer(s->ret.val, ss, a);
@@ -516,6 +556,9 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
 }
 
 void typecheck(Program *prog, Arena *a) {
+    // Register struct definitions
+    g_structs = prog->structs;
+    g_struct_count = prog->struct_count;
     // Collect function signatures
     func_count = 0;
     for (size_t i = 0; i < prog->func_count; i++) {

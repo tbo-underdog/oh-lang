@@ -1,0 +1,24 @@
+$P{x:3 y:3}
+$V{data:*3 len:3}
+#sum_pt(){
+p:P
+p.x=5
+p.y=37
+p.x+p.y
+}
+#vec_sum(){
+v:V
+buf:[4]3=0
+v.data=buf
+v.len=3
+k:=v.data
+k[0]=10
+k[1]=20
+k[2]=12
+k[0]+k[1]+v.len
+}
+#main():3{
+?sum_pt()!=42{\1}
+?vec_sum()!=33{\2}
+0
+}

@@ -38,6 +38,12 @@ the syntax; load it before generating Oh.
 
 - Pointer: `*T`  (e.g. `*3` = pointer to i32, `*1` = pointer to i8 / byte string)
 - Array: `[N]T` (e.g. `[16]3` = array of 16 i32, `[256]1` = 256-byte buffer)
+- Struct: `$Name{field:type field:type ...}` defines a named record (commas
+  optional). E.g. `$V{data:*3 len:3 cap:3}`. Then `v:V` declares one,
+  `v.len` reads a field, `v.len=10` (and `v.len+=1`) writes it. A struct name
+  is itself a type, usable for fields, locals, etc. Typed fields remove the
+  cast noise of positional state arrays — bind a pointer field once
+  (`k:=v.data`, `k` is typed `*3`) then index it directly (`k[i]`).
 - Legacy long names (`i32`, `u8`, `f64`, …) are still accepted but the codes are preferred.
 
 ## 4. Functions
