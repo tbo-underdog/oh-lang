@@ -1,8 +1,8 @@
 // vec: growable i32 array on a heap (needs std/mem). State v:[3]6 = [data,len,cap].
 #vec_new(v:*6,h:*6,cap):v{
-v[0]=halloc(h,(6)(cap*4))
+v[0]=halloc(h,(cap*4))
 v[1]=0
-v[2]=(6)cap}
+v[2]=cap}
 #vec_push(v:*6,h:*6,x):v{
 ?v[1]>=v[2]{
 nc:=v[2]*2

@@ -43,6 +43,42 @@ static void coerce_int_lits(Expr *lhs, Type **lt, Expr *rhs, Type **rt, Arena *a
     if (relit(lhs, (*rt)->kind, a)) { *lt = lhs->typ; return; }
 }
 
+static int int_width(TypeKind k) {
+    switch (k) {
+    case TY_I8: case TY_U8:   return 8;
+    case TY_I16: case TY_U16: return 16;
+    case TY_I32: case TY_U32: return 32;
+    case TY_I64: case TY_U64: return 64;
+    default: return 0;
+    }
+}
+static Type *make_type(Arena *a, TypeKind k);
+static Type *clone_type(Arena *a, Type *t);
+/* Implicit widening: if *slot is a narrower int than `target`, wrap it in an
+ * EX_CAST to target (codegen sext/zext). Never narrows (that needs an explicit
+ * cast). Lets mixed-width code (i64 heap addrs + i32 counts) drop casts. */
+static void widen(Expr **slot, Type *target, Arena *a) {
+    Expr *e = *slot;
+    if (!e || !e->typ) return;
+    if (!is_int_kind(e->typ->kind) || !is_int_kind(target->kind)) return;
+    if (int_width(e->typ->kind) >= int_width(target->kind)) return;
+    Expr *c = (Expr*)arena_alloc(a, sizeof(Expr));
+    memset(c, 0, sizeof(*c));
+    c->kind = EX_CAST;
+    c->cast.to = clone_type(a, target);
+    c->cast.operand = e;
+    c->typ = clone_type(a, target);
+    *slot = c;
+}
+/* In a binary op, widen the narrower int operand to match the wider one. */
+static void widen_binop(Expr *e, Type **lt, Type **rt, Arena *a) {
+    if (!is_int_kind((*lt)->kind) || !is_int_kind((*rt)->kind)) return;
+    int lw = int_width((*lt)->kind), rw = int_width((*rt)->kind);
+    if (lw == rw) return;
+    if (lw < rw) { widen(&e->binop.lhs, *rt, a); *lt = e->binop.lhs->typ; }
+    else         { widen(&e->binop.rhs, *lt, a); *rt = e->binop.rhs->typ; }
+}
+
 static Type *clone_type(Arena *a, Type *t) {
     if (!t) return NULL;
     Type *c = (Type*)arena_alloc(a, sizeof(Type));
@@ -142,6 +178,10 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
         Type *rt = infer(e->binop.rhs, ss, a);
         /* polymorphic int literals adopt the other operand's int type */
         coerce_int_lits(e->binop.lhs, &lt, e->binop.rhs, &rt, a);
+        /* implicit widening: narrower int operand widens to the wider one
+         * (skip for pointer arithmetic, handled below) */
+        if (lt->kind != TY_PTR && rt->kind != TY_PTR)
+            widen_binop(e, &lt, &rt, a);
         switch (e->binop.op) {
         case OP_ADD: case OP_SUB:
             /* Pointer arithmetic: ^T +/- i32 => ^T */
@@ -245,6 +285,8 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
             // int literal argument adopts the parameter's int type
             if (is_int_kind(pt->kind) && relit(e->call.args[i], pt->kind, a))
                 at = e->call.args[i]->typ;
+            // implicit widening: narrower int arg widens to the param's int type
+            if (is_int_kind(pt->kind)) { widen(&e->call.args[i], pt, a); at = e->call.args[i]->typ; }
             // Allow array-to-pointer decay: [N]T -> ^T
             bool compat = types_equal(at, pt);
             if (!compat && at->kind == TY_ARRAY && pt->kind == TY_PTR) {
@@ -327,6 +369,8 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
             /* scalar int literal adopts the declared int type */
             if (is_int_kind(dt->kind) && relit(s->vardecl.init, dt->kind, a))
                 it = s->vardecl.init->typ;
+            /* implicit widening of a narrower int initialiser */
+            if (is_int_kind(dt->kind)) { widen(&s->vardecl.init, dt, a); it = s->vardecl.init->typ; }
             /* array literal: coerce each int-literal element to declared elem type */
             if (dt->kind == TY_ARRAY && s->vardecl.init->kind == EX_ARRAYLIT &&
                 is_int_kind(dt->inner->kind)) {
@@ -347,6 +391,7 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
         Type *vt = lookup_var(ss, s->assign.name);
         if (!vt) { fprintf(stderr, "Undeclared var '%s'\n", s->assign.name); exit(1); }
         Type *rt = infer(s->assign.rhs, ss, a);
+        if (is_int_kind(vt->kind)) { widen(&s->assign.rhs, vt, a); rt = s->assign.rhs->typ; }
         if (!types_equal(rt, vt)) {
             fprintf(stderr, "Type mismatch in assign '%s'\n", s->assign.name);
             exit(1);
@@ -360,6 +405,7 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
             exit(1);
         }
         Type *rt = infer(s->derefassign.rhs, ss, a);
+        if (is_int_kind(vt->inner->kind)) { widen(&s->derefassign.rhs, vt->inner, a); rt = s->derefassign.rhs->typ; }
         if (!types_equal(rt, vt->inner)) {
             fprintf(stderr, "Type mismatch in deref assign '%s'\n", s->derefassign.name);
             exit(1);
@@ -378,6 +424,7 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
         /* polymorphic int literal adopts the element type */
         if (is_int_kind(elem_t->kind) && relit(s->idxassign.rhs, elem_t->kind, a))
             rt = s->idxassign.rhs->typ;
+        if (is_int_kind(elem_t->kind)) { widen(&s->idxassign.rhs, elem_t, a); rt = s->idxassign.rhs->typ; }
         if (!types_equal(rt, elem_t)) {
             fprintf(stderr, "Type mismatch in indexed assign '%s'\n", s->idxassign.name);
             exit(1);
@@ -390,6 +437,7 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
             /* int literal adopts the function's int return type */
             if (is_int_kind(ret_type->kind) && relit(s->ret.val, ret_type->kind, a))
                 vt = s->ret.val->typ;
+            if (is_int_kind(ret_type->kind)) { widen(&s->ret.val, ret_type, a); vt = s->ret.val->typ; }
             if (!types_equal(vt, ret_type)) {
                 fprintf(stderr, "Return type mismatch\n");
                 exit(1);

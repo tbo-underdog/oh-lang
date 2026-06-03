@@ -1,8 +1,8 @@
 // buf: growable byte buffer / string builder on a heap (needs std/mem + std/core).
 #buf_new(b:*6,h:*6,cap):v{
-b[0]=halloc(h,(6)cap)
+b[0]=halloc(h,cap)
 b[1]=0
-b[2]=(6)cap}
+b[2]=cap}
 #buf_byte(b:*6,h:*6,c):v{
 ?b[1]>=b[2]{
 nc:=b[2]*2
