@@ -23,9 +23,11 @@ wins.
 | lsearch | 0.37× | **OH faster** |
 | bitflip (`popcount()` builtin) | 0.47× | **OH faster** |
 | abs | 0.49× | **OH faster** |
+| strscan (byte scan, mutable buffer) | 0.66× | **OH faster** |
 | vec (1M push + sum, fixed cap) | 0.87× | **OH faster** |
 | noalias (single-array kernel) | 0.91× | **OH faster** |
 | simd (`dot` builtin, vectorized) | 0.94× | **OH faster** |
+| fdot (f64 dot product) | 0.99× | ≈tie (C-class float) |
 | map (1M int→int set + get) | 1.06× | ≈tie |
 | struct (field read/write loop) | 1.09× | within bar |
 | buf (1M int appends, growable) | 1.16× | within bar |
@@ -34,7 +36,7 @@ wins.
 | fibonacci (naive tree recursion) | 1.90× | **over bar — justified below** |
 
 **Acceptance bar: OH/C ≤ 1.5× (faster or roughly equal), or justified.**
-**14 of 15 within the bar; the lone exception (fibonacci) is named below.**
+**16 of 17 within the bar; the lone exception (fibonacci) is named below.**
 
 ### Why Oh wins where it wins
 Stdlib/helpers and SIMD builtins are compiled *with* your program
