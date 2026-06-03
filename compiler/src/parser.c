@@ -307,6 +307,25 @@ static Expr *parse_primary(Parser *p) {
 }
 
 /* ---- Statement parsing ---- */
+/* Compound assignment: if the current token is an op immediately followed by
+ * '=' (e.g. `+=`), consume both and return 1 with the BinOp. Enables
+ * `x+=e` / `a[i]*=e` / `!p|=e` as sugar for `x=x+e` etc. */
+static int compound_op(Parser *p, BinOp *op) {
+    if (p->pos + 1 >= p->len || p->tokens[p->pos+1].kind != TK_EQ) return 0;
+    BinOp o;
+    switch (peekk(p)) {
+    case TK_PLUS:  o=OP_ADD;    break;
+    case TK_MINUS: o=OP_SUB;    break;
+    case TK_STAR:  o=OP_MUL;    break;
+    case TK_SLASH: o=OP_DIV;    break;
+    case TK_AMP:   o=OP_BITAND; break;
+    case TK_PIPE:  o=OP_BITOR;  break;
+    case TK_CARET: o=OP_XOR;    break;
+    default: return 0;
+    }
+    advance(p); advance(p); /* consume op and '=' */
+    *op = o; return 1;
+}
 static Stmt *parse_stmt(Parser *p);
 static Stmt **parse_stmt_list(Parser *p, TokenKind terminator, size_t *out_len) {
     DYNARRAY(Stmt*) stmts={0};
@@ -418,9 +437,19 @@ static Stmt *parse_stmt(Parser *p) {
         break;
     }
 
-    /* ! name = expr ;  — pointer deref assign */
+    /* ! name = expr ;  — pointer deref assign (and !name OP= expr compound) */
     case TK_BANG: {
-        advance(p); Token name=expect(p,TK_IDENT); expect(p,TK_EQ);
+        advance(p); Token name=expect(p,TK_IDENT);
+        BinOp cop;
+        if(compound_op(p,&cop)) {
+            Expr *rhs=parse_expr(p); match(p,TK_SEMI);
+            Expr *load=new_expr(p,EX_UNOP); load->unop.op=UOP_DEREF;
+            Expr *id=new_expr(p,EX_IDENT); id->ident=name.text; load->unop.operand=id;
+            Expr *comb=new_expr(p,EX_BINOP); comb->binop.op=cop; comb->binop.lhs=load; comb->binop.rhs=rhs;
+            s->kind=ST_DEREFASSIGN; s->derefassign.name=name.text; s->derefassign.rhs=comb;
+            break;
+        }
+        expect(p,TK_EQ);
         Expr *rhs=parse_expr(p); match(p,TK_SEMI);
         s->kind=ST_DEREFASSIGN; s->derefassign.name=name.text; s->derefassign.rhs=rhs;
         break;
@@ -456,6 +485,16 @@ static Stmt *parse_stmt(Parser *p) {
             s->kind=ST_VARDECL; s->vardecl.name=nm.text; s->vardecl.typ=typ; s->vardecl.init=init; break;
         }
 
+        /* name OP= expr — compound assignment -> name = name OP expr */
+        { BinOp cop;
+          if(compound_op(p,&cop)) {
+            Expr *rhs=parse_expr(p); match(p,TK_SEMI);
+            Expr *lhs=new_expr(p,EX_IDENT); lhs->ident=nm.text;
+            Expr *comb=new_expr(p,EX_BINOP); comb->binop.op=cop; comb->binop.lhs=lhs; comb->binop.rhs=rhs;
+            s->kind=ST_ASSIGN; s->assign.name=nm.text; s->assign.rhs=comb; break;
+          }
+        }
+
         /* = expr — simple assignment */
         if(check(p,TK_EQ)) {
             advance(p); Expr *rhs=parse_expr(p); match(p,TK_SEMI);
@@ -468,6 +507,15 @@ static Stmt *parse_stmt(Parser *p) {
             if(check(p,TK_EQ)) {
                 advance(p); Expr *rhs=parse_expr(p); match(p,TK_SEMI);
                 s->kind=ST_IDXASSIGN; s->idxassign.name=nm.text; s->idxassign.idx=idx; s->idxassign.rhs=rhs; break;
+            }
+            /* a[i] OP= expr -> a[i] = a[i] OP expr (idx evaluated twice) */
+            { BinOp cop;
+              if(compound_op(p,&cop)) {
+                Expr *rhs=parse_expr(p); match(p,TK_SEMI);
+                Expr *load=new_expr(p,EX_ARRAYIDX); load->arridx.name=nm.text; load->arridx.idx=idx;
+                Expr *comb=new_expr(p,EX_BINOP); comb->binop.op=cop; comb->binop.lhs=load; comb->binop.rhs=rhs;
+                s->kind=ST_IDXASSIGN; s->idxassign.name=nm.text; s->idxassign.idx=idx; s->idxassign.rhs=comb; break;
+              }
             }
             /* Not an assignment — it's an index expression statement.
              * Backtrack and parse the whole thing as an expression. */
