@@ -847,6 +847,40 @@ static int emit_expr(Expr *e) {
         TypeKind lk = e->binop.lhs->typ->kind;
         bool is_float = (lk == TY_F32 || lk == TY_F64);
 
+        /* Short-circuit logical && / || — the RHS must NOT be evaluated when the
+         * LHS already decides the result (so guard idioms like `p!=0 && !p>0`
+         * or `d!=0 && n/d>k` are safe). Handled before the eager operand emit. */
+        if (e->binop.op == OP_AND || e->binop.op == OP_OR) {
+            int is_and = (e->binop.op == OP_AND);
+            int la = emit_expr(e->binop.lhs);
+            int ca = ensure_i1(la, e->binop.lhs->typ->kind);
+            if (IS_CONST(ca)) {
+                int lv = const_table[CONST_IDX(ca)].ival != 0;
+                if (is_and && !lv) return new_iconst(0);
+                if (!is_and && lv) return new_iconst(1);
+                int rb = emit_expr(e->binop.rhs);
+                return ensure_i1(rb, e->binop.rhs->typ->kind);
+            }
+            int slot = new_reg();
+            fprintf(out, "  %%v%d = alloca i1\n", slot);
+            int lrhs = new_label(), lshort = new_label(), lend = new_label();
+            if (is_and)
+                fprintf(out, "  br i1 %%t%d, label %%L%d, label %%L%d\n", ca, lrhs, lshort);
+            else
+                fprintf(out, "  br i1 %%t%d, label %%L%d, label %%L%d\n", ca, lshort, lrhs);
+            fprintf(out, "L%d:\n", lrhs);
+            int rb = emit_expr(e->binop.rhs);
+            int cb = ensure_i1(rb, e->binop.rhs->typ->kind);
+            fprintf(out, "  store i1 "); emit_ref(cb);
+            fprintf(out, ", ptr %%v%d\n  br label %%L%d\n", slot, lend);
+            fprintf(out, "L%d:\n  store i1 %d, ptr %%v%d\n  br label %%L%d\n",
+                    lshort, is_and ? 0 : 1, slot, lend);
+            fprintf(out, "L%d:\n", lend);
+            int r = new_reg();
+            fprintf(out, "  %%t%d = load i1, ptr %%v%d\n", r, slot);
+            return r;
+        }
+
         int lr = emit_expr(e->binop.lhs);
         int rr = emit_expr(e->binop.rhs);
         int res = new_reg();
@@ -1282,6 +1316,20 @@ static int emit_expr(Expr *e) {
         int or2 = emit_expr(e->cast.operand);
         TypeKind from_k = e->cast.operand->typ->kind;
         TypeKind to_k   = e->cast.to->kind;
+        /* The cast branches reference the operand as %tN, so a constant operand
+         * (e.g. `(6)5`, `(*3)0`, `(d)5`) must first be materialized into a real
+         * register — otherwise we'd emit `%t<const-id>` (undefined value). */
+        if (IS_CONST(or2)) {
+            int m = new_reg();
+            if (from_k == TY_F32 || from_k == TY_F64) {
+                fprintf(out, "  %%t%d = fadd %s 0x0000000000000000, ", m, llvm_scalar(from_k));
+                emit_ref(or2); fprintf(out, "\n");
+            } else {
+                fprintf(out, "  %%t%d = add %s 0, ", m, llvm_scalar(from_k));
+                emit_ref(or2); fprintf(out, "\n");
+            }
+            or2 = m;
+        }
         int r = new_reg();
         int from_f = (from_k == TY_F32 || from_k == TY_F64);
         int to_f   = (to_k   == TY_F32 || to_k   == TY_F64);

@@ -78,6 +78,11 @@ run 21_vecfull    137 std/mem.oh std/vec.oh tests/21_vecfull.oh
 run 22_mapfull    137 std/mem.oh std/map.oh tests/22_mapfull.oh
 run 23_float      0  tests/23_float.oh
 run 24_str        0  std/core.oh std/str.oh tests/24_str.oh
+run 25_shortcirc  0  tests/25_shortcircuit.oh
+run 26_loops      0  tests/26_loops.oh
+run 27_inttypes   0  tests/27_inttypes.oh
+run 28_corelib    0  std/core.oh tests/28_corelib.oh
+run 29_recursion  0  tests/29_recursion.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh

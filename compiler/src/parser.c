@@ -347,6 +347,22 @@ static int compound_op(Parser *p, BinOp *op) {
     advance(p); advance(p); /* consume op and '=' */
     *op = o; return 1;
 }
+/* Is `e` a compile-time-negative step? (so `@i=s,e,step` counts DOWN and the
+ * loop guard must be `i > end`, not `i < end`). Covers the realistic reverse-loop
+ * idioms: a unary-negated literal (-k) and `0 - k`. A runtime/variable negative
+ * step is not detectable here -> stays ascending (documented). */
+static int is_neg_const_step(Expr *e) {
+    if (!e) return 0;
+    if (e->kind == EX_INTLIT) return e->ival < 0;
+    if (e->kind == EX_UNOP && e->unop.op == UOP_NEG &&
+        e->unop.operand && e->unop.operand->kind == EX_INTLIT &&
+        e->unop.operand->ival > 0) return 1;
+    if (e->kind == EX_BINOP && e->binop.op == OP_SUB &&
+        e->binop.lhs && e->binop.lhs->kind == EX_INTLIT && e->binop.lhs->ival == 0 &&
+        e->binop.rhs && e->binop.rhs->kind == EX_INTLIT && e->binop.rhs->ival > 0) return 1;
+    return 0;
+}
+
 static Stmt *parse_stmt(Parser *p);
 static Stmt **parse_stmt_list(Parser *p, TokenKind terminator, size_t *out_len) {
     DYNARRAY(Stmt*) stmts={0};
@@ -410,8 +426,9 @@ static Stmt *parse_stmt(Parser *p) {
             s->forst.has_init_decl=true;
             s->forst.init_name=vname.text; s->forst.init_typ=loop_type; s->forst.init_init=start;
 
-            /* cond: var < end */
-            Expr *cond_e=new_expr(p,EX_BINOP); cond_e->binop.op=OP_LT;
+            /* cond: var < end (ascending) or var > end (negative const step) */
+            Expr *cond_e=new_expr(p,EX_BINOP);
+            cond_e->binop.op = is_neg_const_step(step_expr) ? OP_GT : OP_LT;
             Expr *vid=new_expr(p,EX_IDENT); vid->ident=vname.text;
             cond_e->binop.lhs=vid; cond_e->binop.rhs=end;
             s->forst.cond=cond_e;
