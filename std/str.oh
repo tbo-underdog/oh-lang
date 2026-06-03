@@ -1,5 +1,5 @@
 // str: comparisons, parsing, search
-#streq(a:*1,b:*1){
+#streq(a:c,b:c){
 i:=0
 ~1{
 ca:=a[i]
@@ -8,18 +8,18 @@ cb:=b[i]
 ?ca==0{\1}
 i=i+1}
 0}
-#starts(s:*1,p:*1){
+#starts(s:c,p:c){
 i:=0
 ~p[i]!=0{
 ?s[i]!=p[i]{\0}
 i=i+1}
 1}
-#atoi(s:*1){
+#atoi(s:c){
 n:=0
 i:=0
 ~s[i]>=48&&s[i]<=57{n=n*10+(3)(s[i])-48 i=i+1}
 n}
-#sfind(h:*1,nd:*1){
+#sfind(h:c,nd:c){
 hl:=slen(h)
 nl:=slen(nd)
 @i,hl-nl+1{

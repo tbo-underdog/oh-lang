@@ -33,6 +33,7 @@ the syntax; load it before generating Oh.
 | `1` | i8 | | `f` | f32 |
 | `2` | i16 | | `d` | f64 |
 | `3` | i32 (default) | | `b` | bool |
+| `c` | *i8 (string/byte pointer) |
 | `6` | i64 | | `v` | void |
 
 - Pointer: `*T`  (e.g. `*3` = pointer to i32, `*1` = pointer to i8 / byte string)

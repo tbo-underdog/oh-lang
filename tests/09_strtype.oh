@@ -1,0 +1,2 @@
+#slen(s:c){i:=0 ~s[i]!=0{i+=1} i}
+#main(){?slen("hello")!=5{\1} 0}

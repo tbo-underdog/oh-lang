@@ -12,7 +12,7 @@ d:=(*1)b[0]
 li:=(3)b[1]
 d[li]=(1)c
 b[1]=b[1]+1}
-#buf_str(b:*6,h:*6,s:*1):v{
+#buf_str(b:*6,h:*6,s:c):v{
 i:=0
 ~s[i]!=0{
 buf_byte(b,h,(3)s[i])

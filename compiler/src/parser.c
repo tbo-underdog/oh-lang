@@ -49,6 +49,8 @@ static Type *parse_type(Parser *p) {
         else if (strcmp(tn.text,"d")==0) t->kind=TY_F64;
         else if (strcmp(tn.text,"b")==0) t->kind=TY_BOOL;
         else if (strcmp(tn.text,"v")==0) t->kind=TY_VOID;
+        /* `c` = char/byte string pointer = *i8 (very common as a string param) */
+        else if (strcmp(tn.text,"c")==0) { t->kind=TY_PTR; Type*in=(Type*)arena_alloc(p->a,sizeof(Type)); memset(in,0,sizeof(*in)); in->kind=TY_I8; t->inner=in; }
         /* legacy type names still accepted */
         else if (strcmp(tn.text,"i8") ==0) t->kind=TY_I8;
         else if (strcmp(tn.text,"i16")==0) t->kind=TY_I16;

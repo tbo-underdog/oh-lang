@@ -1,7 +1,7 @@
 // json: lightweight field extraction over a flat JSON object (no allocation).
 // json_int(buf,key): integer value for "key" (signed). Returns -1 if not found.
 // Searches for the (bare) key, scans past ':' and spaces, parses [-]digits.
-#json_int(buf:*1,key:*1){
+#json_int(buf:c,key:c){
 k:=sfind(buf,key)
 ?k<0{\-1}
 i:=k+slen(key)
@@ -18,4 +18,4 @@ n=n*10+(3)(buf[i])-48
 i=i+1}
 neg==1?0-n:n}
 // json_has(buf,key): 1 if key present, else 0
-#json_has(buf:*1,key:*1)sfind(buf,key)>=0?1:0
+#json_has(buf:c,key:c)sfind(buf,key)>=0?1:0

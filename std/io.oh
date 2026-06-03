@@ -1,4 +1,4 @@
 // io: thin write() helpers over fd
-#print(s:*1):v{sys(1,1,s,slen(s))}
-#eprint(s:*1):v{sys(1,2,s,slen(s))}
+#print(s:c):v{sys(1,1,s,slen(s))}
+#eprint(s:c):v{sys(1,2,s,slen(s))}
 #printn(n):v{b:[16]1 e:=itoa(b,0,n) b[e]=10 sys(1,1,&b,e+1)}

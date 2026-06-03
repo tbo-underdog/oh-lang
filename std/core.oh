@@ -1,16 +1,16 @@
 // core: bytes, memory, int<->ascii
-#slen(s:*1){i:=0 ~s[i]!=0{i=i+1} i}
-#bcopy(d:*1,off,s:*1){i:=0 ~s[i]!=0{d[off+i]=s[i] i=i+1} off+i}
-#memcpy(d:*1,s:*1,n):v{@i,n{d[i]=s[i]}}
-#memset(d:*1,v,n):v{@i,n{d[i]=(1)v}}
-#memcmp(a:*1,b:*1,n){
+#slen(s:c){i:=0 ~s[i]!=0{i=i+1} i}
+#bcopy(d:c,off,s:c){i:=0 ~s[i]!=0{d[off+i]=s[i] i=i+1} off+i}
+#memcpy(d:c,s:c,n):v{@i,n{d[i]=s[i]}}
+#memset(d:c,v,n):v{@i,n{d[i]=(1)v}}
+#memcmp(a:c,b:c,n){
 pa:=(*6)a
 pb:=(*6)b
 w:=n/8
 @i,w{?pa[i]!=pb[i]{\1}}
 @j=w*8,n{?a[j]!=b[j]{\1}}
 0}
-#itoa(d:*1,off,n){
+#itoa(d:c,off,n){
 ?n==0{
 d[off]=48
 \off+1}
