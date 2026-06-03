@@ -1,34 +1,41 @@
-// buf: fixed-capacity byte buffer / string builder on a heap (needs std/mem +
-// std/core). Capacity chosen at creation; append aborts (137) on overflow rather
-// than growing. Struct-typed `data` field removes the per-access cast.
+// buf: growable byte buffer / string builder on a heap (needs std/mem + std/core).
+// A string builder's final length is genuinely unknown at creation, so buf GROWS
+// (unlike vec, where the count is known up front). hrealloc extends the last
+// allocation in place -> amortized O(1). Struct-typed `data` field, no per-access cast.
 $Buf{data:*1 len:3 cap:3}
 #buf_new(b:*Buf,h:*6,cap):v{
 b.data=(*1)halloc(h,(6)cap)
 b.len=0
 b.cap=cap}
-#buf_byte(b:*Buf,c):v{
-?b.len>=b.cap{sys(60,137)}
+#buf_byte(b:*Buf,h:*6,c):v{
+?b.len>=b.cap{
+nc:=b.cap*2
+b.data=(*1)hrealloc(h,(6)b.data,(6)b.cap,(6)nc)
+b.cap=nc}
 d:=b.data
 d[b.len]=(1)c
 b.len=b.len+1}
-#buf_str(b:*Buf,s:c):v{
+#buf_str(b:*Buf,h:*6,s:c):v{
 i:=0
 ~s[i]!=0{
-buf_byte(b,(3)s[i])
+buf_byte(b,h,(3)s[i])
 i=i+1}}
-// format n directly into the buffer: one bounds check, then write digits
-// in place (no temp array, no per-byte call) — the hot path for serialization.
-#buf_int(b:*Buf,n):v{
+// format n directly into the buffer: count digits, ensure capacity, write in place
+// (no temp array, no per-byte call) — faster than itoa-to-temp + per-byte append.
+#buf_int(b:*Buf,h:*6,n):v{
 ?n<0{
-buf_byte(b,45)
+buf_byte(b,h,45)
 n=0-n}
 ?n==0{
-buf_byte(b,48)
+buf_byte(b,h,48)
 \}
 t:=n
 c:=0
 ~t>0{c=c+1 t=t/10}
-?b.len+c>b.cap{sys(60,137)}
+~b.len+c>b.cap{
+nc:=b.cap*2
+b.data=(*1)hrealloc(h,(6)b.data,(6)b.cap,(6)nc)
+b.cap=nc}
 d:=b.data
 e:=b.len+c
 i:=e

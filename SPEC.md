@@ -157,12 +157,12 @@ Compile the modules you use alongside your program; unused functions cost 0 byte
 - **std/str**: `streq(a,b)` `starts(s,p)` `atoi(s)` `sfind(haystack,needle)`
 - **std/io**: `print(s)` `eprint(s)` `printn(n)`
 - **std/net**: `connect_to(a,b,c,e,port)` (→i64 fd) · `status(buf)` (parse HTTP status)
-- **std/buf**: growable byte buffer / string builder on a heap (needs std/mem+core). `buf_new(b,h,cap)` `buf_byte(b,h,c)` `buf_str(b,h,s)` `buf_int(b,h,n)` `buf_ptr(b)` `buf_len(b)`.
-- **std/map**: fixed-capacity int->int hash map on a heap (needs std/mem; cap = power of two). `map_new(m,h,cap)` `map_set(m,k,v)` `map_get(m,k)` (-1 if absent) `map_has(m,k)` `map_count(m)`.
-- **std/vec**: growable i32 array on a heap (needs std/mem). State `v:[3]6`. `vec_new(v,h,cap)` `vec_push(v,h,x)` `vec_get(v,i)` `vec_set(v,i,x)` `vec_len(v)` `vec_pop(v)`.
+- **std/buf**: fixed-capacity byte buffer / string builder on a heap (needs std/mem+core). State is a `Buf` (struct); pass it directly — it decays to `*Buf`. `buf_new(b,h,cap)` `buf_byte(b,c)` `buf_str(b,s)` `buf_int(b,n)` `buf_ptr(b)` `buf_len(b)`. Size is chosen at creation; append aborts on overflow.
+- **std/map**: fixed-capacity int->int hash map on a heap (needs std/mem; cap = power of two and must exceed the entry count). State is a `Map`. `map_new(m,h,cap)` `map_set(m,k,v)` `map_get(m,k)` (-1 if absent) `map_has(m,k)` `map_count(m)`.
+- **std/vec**: fixed-capacity i32 array on a heap (needs std/mem). State is a `Vec`. `vec_new(v,h,cap)` `vec_push(v,x)` `vec_get(v,i)` `vec_set(v,i,x)` `vec_len(v)` `vec_pop(v)`. Size is chosen at creation (the Oh model: you know the size when you make it); push does not grow — it aborts past `cap`.
 - **std/math**: `iabs` `imin` `imax` `clamp(x,lo,hi)` `ipow(base,exp)` `isqrt(n)`.
 - **std/json**: `json_int(buf,key)` (signed int field, -1 if absent) · `json_has(buf,key)`. Flat-object field extraction, no allocation.
-- **std/mem**: `heap_new(h,bytes)` (mmap a heap; `h` is a `[3]6` state array) · `halloc(h,n)` (→i64 addr; cast e.g. `(*3)halloc(h,40)`) · `hused(h)`. No globals — the caller holds the heap state array.
+- **std/mem**: mmap-backed bump heap; `h` is a `[3]6` state array, no globals — the caller holds it. `heap_new(h,bytes)` · `halloc(h,n)` (→i64 addr; cast e.g. `(*3)halloc(h,40)`) · `hused(h)`. Reclaim by scope: `heap_reset(h)` (free everything) · `heap_mark(h)`/`heap_restore(h,m)` (free back to a saved point — a bump arena). On exhaustion (or mmap failure) the allocator aborts (exit 137) rather than corrupting memory; size the heap for the work.
 
 ## 11. Complete worked example — TCP echo of a fixed HTTP response
 
