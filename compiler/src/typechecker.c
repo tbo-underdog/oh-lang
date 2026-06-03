@@ -34,6 +34,17 @@ static bool relit(Expr *e, TypeKind k, Arena *a) {
     return false;
 }
 
+/* Float-literal polymorphism: a float literal (or its negation) adopts the
+ * float type it is used with — so `x:f=1.5` types 1.5 as f32, not f64. */
+static bool relit_float(Expr *e, TypeKind k, Arena *a) {
+    if (!e || (k != TY_F32 && k != TY_F64)) return false;
+    if (e->kind == EX_FLOATLIT) { e->typ = make_type(a, k); return true; }
+    if (e->kind == EX_UNOP && e->unop.op==UOP_NEG) {
+        if (relit_float(e->unop.operand, k, a)) { e->typ = make_type(a, k); return true; }
+    }
+    return false;
+}
+
 /* If exactly one side of a binary op is a constant int literal and the other is
  * a concrete int type, coerce the literal to that type. Mutates the exprs' typ. */
 static void coerce_int_lits(Expr *lhs, Type **lt, Expr *rhs, Type **rt, Arena *a) {
@@ -413,6 +424,9 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
             Type *dt = s->vardecl.typ;
             /* scalar int literal adopts the declared int type */
             if (is_int_kind(dt->kind) && relit(s->vardecl.init, dt->kind, a))
+                it = s->vardecl.init->typ;
+            /* float literal adopts the declared float type (f32 vs f64) */
+            if ((dt->kind==TY_F32||dt->kind==TY_F64) && relit_float(s->vardecl.init, dt->kind, a))
                 it = s->vardecl.init->typ;
             /* implicit widening of a narrower int initialiser */
             if (is_int_kind(dt->kind)) { widen(&s->vardecl.init, dt, a); it = s->vardecl.init->typ; }

@@ -76,6 +76,8 @@ run 19_alloc      0  std/mem.oh tests/19_alloc.oh
 run 20_stdlib     0  std/core.oh std/mem.oh std/map.oh std/buf.oh std/math.oh tests/20_stdlib.oh
 run 21_vecfull    137 std/mem.oh std/vec.oh tests/21_vecfull.oh
 run 22_mapfull    137 std/mem.oh std/map.oh tests/22_mapfull.oh
+run 23_float      0  tests/23_float.oh
+run 24_str        0  std/core.oh std/str.oh tests/24_str.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh

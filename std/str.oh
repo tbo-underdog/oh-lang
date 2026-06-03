@@ -17,8 +17,10 @@ i=i+1}
 #atoi(s:c){
 n:=0
 i:=0
+neg:=0
+?s[0]==45{neg=1 i=1}
 ~s[i]>=48&&s[i]<=57{n=n*10+(3)(s[i])-48 i=i+1}
-n}
+neg==1?0-n:n}
 #sfind(h:c,nd:c){
 hl:=slen(h)
 nl:=slen(nd)

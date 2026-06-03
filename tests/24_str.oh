@@ -1,0 +1,11 @@
+#main():3{
+?streq("hello","hello")!=1{\1}
+?streq("hello","help")!=0{\2}
+?starts("hello world","hello")!=1{\3}
+?starts("hi","hello")!=0{\4}
+?atoi("42")!=42{\5}
+?atoi("-42")!=0-42{\6}
+?atoi("0")!=0{\7}
+?sfind("hello world","world")!=6{\8}
+?sfind("abc","xyz")!=0-1{\9}
+0}

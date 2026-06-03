@@ -92,7 +92,13 @@ static int new_fconst(double v) {
 static void emit_ref(int r) {
     if (IS_CONST(r)) {
         ConstEntry *ce = &const_table[CONST_IDX(r)];
-        if (ce->is_float) fprintf(out, "%g", ce->fval);
+        if (ce->is_float) {
+            /* Emit the exact IEEE-754 bits as LLVM hex float — valid for both
+             * `double` and `float`, and never drops the point (3.0 -> "3" was
+             * an invalid integer constant in a float context). */
+            union { double d; unsigned long long u; } b; b.d = ce->fval;
+            fprintf(out, "0x%016llX", b.u);
+        }
         else              fprintf(out, "%lld", (long long)ce->ival);
     } else {
         fprintf(out, "%%t%d", r);
@@ -756,7 +762,9 @@ static int emit_icmp(const char *pred, int lr, int rr, TypeKind k) {
         if (result >= 0) return new_iconst(result);
     }
     int res = new_reg();
-    fprintf(out, "  %%t%d = icmp %s %s ", res, pred, llvm_scalar(k));
+    /* float operands use fcmp (ordered predicates); integers use icmp */
+    int is_fcmp = (k == TY_F32 || k == TY_F64);
+    fprintf(out, "  %%t%d = %s %s %s ", res, is_fcmp ? "fcmp" : "icmp", pred, llvm_scalar(k));
     emit_ref(lr); fprintf(out, ", "); emit_ref(rr); fprintf(out, "\n");
     return res;
 }
@@ -1275,12 +1283,32 @@ static int emit_expr(Expr *e) {
         TypeKind from_k = e->cast.operand->typ->kind;
         TypeKind to_k   = e->cast.to->kind;
         int r = new_reg();
+        int from_f = (from_k == TY_F32 || from_k == TY_F64);
+        int to_f   = (to_k   == TY_F32 || to_k   == TY_F64);
+        int from_unsigned = (from_k==TY_U8||from_k==TY_U16||from_k==TY_U32||from_k==TY_U64);
+        int to_unsigned   = (to_k==TY_U8||to_k==TY_U16||to_k==TY_U32||to_k==TY_U64);
         if (from_k == to_k) {
-            /* Same type: trivial bitcast — just copy the register via add 0 */
+            /* Same type: trivial copy */
             if (to_k == TY_PTR)
                 fprintf(out, "  %%t%d = getelementptr i8, ptr %%t%d, i32 0\n", r, or2);
+            else if (to_f)
+                return or2; /* float no-op cast — reuse the value (no `add float`) */
             else
                 fprintf(out, "  %%t%d = add %s %%t%d, 0\n", r, llvm_scalar(to_k), or2);
+        } else if (from_f && to_f) {
+            /* f32 <-> f64 */
+            if (from_k == TY_F32)
+                fprintf(out, "  %%t%d = fpext float %%t%d to double\n", r, or2);
+            else
+                fprintf(out, "  %%t%d = fptrunc double %%t%d to float\n", r, or2);
+        } else if (from_f && !to_f) {
+            /* float -> int */
+            fprintf(out, "  %%t%d = %s %s %%t%d to %s\n", r,
+                    to_unsigned ? "fptoui" : "fptosi", llvm_scalar(from_k), or2, llvm_scalar(to_k));
+        } else if (!from_f && to_f) {
+            /* int -> float */
+            fprintf(out, "  %%t%d = %s %s %%t%d to %s\n", r,
+                    from_unsigned ? "uitofp" : "sitofp", llvm_scalar(from_k), or2, llvm_scalar(to_k));
         } else if (to_k == TY_PTR && (from_k == TY_I32 || from_k == TY_I64 || from_k == TY_U64)) {
             fprintf(out, "  %%t%d = inttoptr %s %%t%d to ptr\n", r, llvm_scalar(from_k), or2);
         } else if ((to_k == TY_I32 || to_k == TY_I64 || to_k == TY_U64) && from_k == TY_PTR) {
