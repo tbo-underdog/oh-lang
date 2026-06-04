@@ -70,8 +70,14 @@ fd:=sys(41,2,1,0)
 one:=1
 sys(54,fd,1,2,&one,4)
 sa:[16]1=[2,0,31,155,0,0,0,0,0,0,0,0,0,0,0,0]
-?sys(49,fd,&sa,16)<0{\2}
+?sys(49,fd,&sa,16)<0{
+e:="bind failed: port 8091 already in use (another ./api running?)\n"
+sys(1,1,e,slen(e))
+\2
+}
 sys(50,fd,16)
+banner:="Oh calculator API listening on http://localhost:8091/  (Ctrl-C to stop)\n"
+sys(1,1,banner,slen(banner))
 ~1{
 c:=sys(43,fd,0,0)
 ?c<0{\3}
