@@ -12,7 +12,7 @@ for an AI to write and process), and a decoder turns it back into readable
 pseudo-code for humans to verify. You do not read raw Oh; you read the
 decoded form and the tests.
 
-> Status: **v1**. Honest scope below — this is a young compiler with a real but
+> Status: **v2**. Honest scope below — this is a young compiler with a real but
 > limited platform surface. It is not a finished ecosystem.
 
 ---
@@ -23,7 +23,7 @@ decoded form and the tests.
   −54% on workloads using the built-in vector/struct features) — see
   [BENCHMARKS.md](BENCHMARKS.md).
 - **C-class performance** — faster than or equal to C on the majority of
-  benchmarks (14 of 15 within the ≤1.5× bar), slower on a few. We publish the
+  benchmarks (16 of 18 within the ≤1.5× bar), slower on a few. We publish the
   losses, not just the wins.
 - **Static types with structs** — `$Name{field:type …}` records (typed fields,
   pass-by-pointer), plus SIMD reduction builtins (`dot`, `vsum`) that lower to

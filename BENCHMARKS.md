@@ -58,9 +58,11 @@ builtin lowers to a vectorized reduction (AVX-512 under `-march=native`); `noali
   C's `fib` that it won't apply to our IR despite matched attributes. Narrow clang
   heuristic; only bites naive exponential recursion.
 - **math / max_array / struct / buf (1.06–1.25×)** — all within the bar. `buf`
-  serialization (int→string) is the closest watch item: Oh's `buf_int` is a
-  non-inlined call with data-dependent division loops; an inlining hint would close
-  the residual gap. `max_array` is small-array store-to-load forwarding.
+  serialization (int→string) is the closest watch item: `buf_int` *does* inline
+  (the whole benchmark compiles to 0 `callq`), but its two-pass format (count digits,
+  then write, with integer division) is algorithmically heavier than C's formatter —
+  a small residual, not call overhead. `max_array` is small-array store-to-load
+  forwarding.
 
 ## Tokens (OH vs equivalent C, reachable-only)
 
@@ -83,7 +85,7 @@ A freestanding build links no libc. The HTTP web server:
 
 | | Oh (freestanding) | C (libc) |
 |---|---|---|
-| binary size | 9,056 bytes | 16,272 bytes |
+| binary size | 9,168 bytes | 16,272 bytes |
 | dynamic dependencies | none (static) | libc.so.6 |
 
 ## Memory model (v2)
