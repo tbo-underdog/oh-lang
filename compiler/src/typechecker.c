@@ -595,7 +595,7 @@ static void check_stmt(Stmt *s, ScopeStack *ss, Type *ret_type, Arena *a) {
         break;
     }
     case ST_EXPRSTMT:
-        infer(s->exprstmt, ss, a);
+        if (s->exprstmt) infer(s->exprstmt, ss, a);  /* NULL = empty-block/blank-line no-op */
         break;
     }
 }

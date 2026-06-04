@@ -1779,7 +1779,7 @@ static void emit_stmt(Stmt *s) {
     }
 
     case ST_EXPRSTMT:
-        emit_expr(s->exprstmt);
+        if (s->exprstmt) emit_expr(s->exprstmt);  /* NULL = empty-block/blank-line no-op */
         break;
     }
 }

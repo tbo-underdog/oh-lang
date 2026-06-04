@@ -1,0 +1,24 @@
+// Conway's Game of Life — engine (toroidal grid). No main; compiled with a driver.
+// Grid is a flat [h*w] array of bytes (0=dead, 1=alive).
+#nlive(g:*1,w,h,r,c){
+n:=0
+@dr=0-1,2{
+@dc=0-1,2{
+?dr==0&&dc==0{}:{
+nr:=(r+dr+h)%h
+nc:=(c+dc+w)%w
+n=n+(3)g[nr*w+nc]
+}
+}
+}
+n}
+#step(cur:*1,nxt:*1,w,h):v{
+@r,h{
+@c,w{
+n:=nlive(cur,w,h,r,c)
+cell:=(3)cur[r*w+c]
+live:=n==3||cell==1&&n==2
+nxt[r*w+c]=(1)(live?1:0)
+}
+}
+}

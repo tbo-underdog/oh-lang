@@ -1,0 +1,46 @@
+// Conway's Game of Life — animated terminal demo (uses life_core engine).
+// Compile: ./compiler/oh projects/13_life/life_core.oh projects/13_life/life.oh -o life
+// 64x32 toroidal grid seeded with gliders; renders ~12fps via raw write+nanosleep.
+#put_glider(g:*1,w,r,c):v{
+g[r*w+c+1]=1
+g[(r+1)*w+c+2]=1
+g[(r+2)*w+c]=1
+g[(r+2)*w+c+1]=1
+g[(r+2)*w+c+2]=1
+}
+#seed(g:*1,w):v{
+put_glider(g,w,1,1)
+put_glider(g,w,10,20)
+put_glider(g,w,6,40)
+put_glider(g,w,20,55)
+put_glider(g,w,15,5)
+}
+#render(g:*1,w,h,buf:*1){
+p:=0
+buf[p]=27 p=p+1
+buf[p]=91 p=p+1
+buf[p]=72 p=p+1
+@r,h{
+@c,w{
+?g[r*w+c]==1{buf[p]=35}:{buf[p]=32}
+p=p+1
+}
+buf[p]=10 p=p+1
+}
+p}
+#main(){
+cur:[2048]1=0
+nxt:[2048]1=0
+buf:[2200]1=0
+ts:[2]6
+ts[0]=0
+ts[1]=80000000
+seed(&cur[0],64)
+~1{
+ln:=render(&cur[0],64,32,&buf[0])
+sys(1,1,&buf[0],ln)
+step(&cur[0],&nxt[0],64,32)
+@i,2048{cur[i]=nxt[i]}
+sys(35,&ts[0],0)
+}
+0}
