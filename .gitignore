@@ -1,14 +1,15 @@
 # build artifacts — rebuilt from source, never committed
 compiler/oh
-compiler/overhaul
-compiler/*.o
-compiler/src/*.o
 translator/ohtranslate
-translator/*.o
-# intermediate / output
-*.ll
-*.s
 *.o
 a.out
-# compiled benchmark/test binaries
+# demo binaries built in the repo root
+/api
+/life
+# intermediate IR/asm anywhere EXCEPT the committed freestanding runtime + start stubs
+*.ll
+*.s
+!tooling/*.s
+!tooling/*.ll
+# compiled benchmark binaries
 *_bench
