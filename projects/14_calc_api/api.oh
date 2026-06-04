@@ -1,0 +1,80 @@
+// Calculator HTTP API in Oh — raw syscalls, no libc. Routes:
+//   GET /            -> HTML form (submit button / Enter)
+//   GET /status      -> "ok" health check
+//   GET /add?a=&b=   -> a+b
+//   GET /divide?a=&b=-> a/b, guards divide-by-zero
+// Needs std/core (bcopy,itoa) + std/str (starts,sfind,atoi). Port 8091.
+// Body length is implied by Connection: close (no Content-Length to compute).
+
+#respond(c:6,result):v{
+resp:[256]1=0
+o:=bcopy(resp,0,"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n")
+r:=result
+?r<0{
+resp[o]=45
+o=o+1
+r=0-r
+}
+o=itoa(resp,o,r)
+sys(1,c,&resp[0],o)
+sys(3,c)}
+
+#respond_text(c:6,msg:c):v{
+resp:[1024]1=0
+o:=bcopy(resp,0,"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n")
+o=bcopy(resp,o,msg)
+sys(1,c,&resp[0],o)
+sys(3,c)}
+
+#getparam(req:c,key:c){
+i:=sfind(req,key)
+?i<0{\0}
+p:=&req[i+2]
+atoi(p)}
+
+#serve_form(c:6):v{
+resp:[1024]1=0
+o:=bcopy(resp,0,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")
+o=bcopy(resp,o,"<h2>Oh Calculator API</h2><form action=/add>a <input name=a> b <input name=b> <button>add</button></form><form action=/divide>a <input name=a> b <input name=b> <button>divide</button></form><p>health: <a href=/status>/status</a></p>")
+sys(1,c,&resp[0],o)
+sys(3,c)}
+
+#handle(c:6):v{
+req:[2048]1=0
+sys(0,c,&req[0],2048)
+?starts(req,"GET /status"){
+respond_text(c,"ok")
+\
+}
+?starts(req,"GET /add"){
+a:=getparam(req,"a=")
+b:=getparam(req,"b=")
+respond(c,a+b)
+\
+}
+?starts(req,"GET /divide"){
+a:=getparam(req,"a=")
+b:=getparam(req,"b=")
+?b==0{
+respond_text(c,"error: division by zero")
+}:{
+respond(c,a/b)
+}
+\
+}
+serve_form(c)}
+
+#main(){
+fd:=sys(41,2,1,0)
+?fd<0{\1}
+one:=1
+sys(54,fd,1,2,&one,4)
+sa:[16]1=[2,0,31,155,0,0,0,0,0,0,0,0,0,0,0,0]
+?sys(49,fd,&sa,16)<0{\2}
+sys(50,fd,16)
+~1{
+c:=sys(43,fd,0,0)
+?c<0{\3}
+handle(c)
+}
+0}
