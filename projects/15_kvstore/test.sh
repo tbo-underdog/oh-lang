@@ -35,6 +35,13 @@ chk 'Z x\nF\nK\n' '? + 0' "unknown verb -> ?, flush -> +, empty count 0"
 # still alive after flush
 chk 'S after flush_ok\nG after\n' '+ flush_ok' "alive after flush"
 
+# edge cases
+chk 'S empty \nG empty\n' '+ ' "empty value"
+chk 'D ghost\n' '+' "delete missing key is a no-op +"
+chk 'S cnt 41\nI cnt\nG cnt\n' '+ 42 42' "incr existing numeric"
+chk 'I fresh\nI fresh\nI fresh\n' '1 2 3' "incr creates + counts up"
+chk 'S spaced hello there world\nG spaced\n' '+ hello there world' "value may contain spaces"
+
 # large value (2 KB) round-trips intact (bigger than the old 96-byte cap)
 BV=$(printf 'x%.0s' $(seq 1 2000))
 gv=$(printf 'S blob %s\nG blob\n' "$BV" | timeout 6 nc -q1 localhost 8092 2>/dev/null | sed -n '2p')

@@ -46,6 +46,19 @@ asserted on both arches.
 - `I` gives atomic counters; in-memory means restart = empty, which is correct for a
   cache (recompute or re-fetch).
 
+## Tokens — honest: this is Oh's *weak* case (no savings here)
+Measured against an idiomatic C equivalent (`kv.c`, same protocol/features, libc),
+behaviorally cross-checked to produce identical output: **ohkv is ~+64% tokens vs C.**
+That's the opposite of Oh's compute/SIMD wins, for structural reasons:
+- it **bundles its allocator + mem/string helpers** (`heap_new`/`halloc`, `itoa`,
+  `slen`) that C gets **free from libc** (`malloc`, `sprintf`, uncounted),
+- it does **manual byte-copy loops** where C writes `memcpy`/`memmove`,
+- it uses **verbose raw syscalls** (`sys(41,…)`) where C writes `socket()`.
+
+ohkv's value is **not** token density — it's a **9 KB freestanding zero-dependency
+binary**, identical on x86-64 and ARM64, with an AI-friendly protocol. Token wins
+live in compute/vectorized code, not networked systems glue; we don't claim otherwise.
+
 ## Honest limits
 - **Values are newline-free and ≤ 4 KB** — the line protocol delimits on `\n`, so a
   value cannot contain a newline, and 4 KB is the per-value cap. Arbitrary binary or
