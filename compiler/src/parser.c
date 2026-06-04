@@ -286,7 +286,21 @@ static Expr *parse_primary(Parser *p) {
             }
             /* Skip base type token */
             if (tmp<p->len && (p->tokens[tmp].kind==TK_INTLIT||p->tokens[tmp].kind==TK_IDENT)) tmp++;
-            if (tmp<p->len && p->tokens[tmp].kind==TK_RPAREN) is_cast=true;
+            /* It's a cast only if `)` is followed by the start of an OPERAND.
+             * Otherwise `(2)` is just the value 2 in parens (2 also happens to be
+             * a type code) — so `(2)+3`, `(1)&mask` etc. are grouping, not casts.
+             * Dual-use prefixes (- & ! ~) are treated as binary here (grouping);
+             * a real cast of those is written `(T)(-x)`. */
+            if (tmp+1<p->len && p->tokens[tmp].kind==TK_RPAREN) {
+                TokenKind nk = p->tokens[tmp+1].kind;
+                /* operand starts: literals/idents/'(' and the ALWAYS-unary prefixes
+                 * ! (deref/not) and ~ (bitnot). The dual-use - and & are treated as
+                 * binary here, so `(6)-1` and `(2)&255` are arithmetic, not casts. */
+                if (nk==TK_INTLIT||nk==TK_FLOATLIT||nk==TK_IDENT||nk==TK_LPAREN||
+                    nk==TK_STRLIT||nk==TK_BOOLTRUE||nk==TK_BOOLFALSE||
+                    nk==TK_BANG||nk==TK_TILDE)
+                    is_cast=true;
+            }
         }
         if (is_cast) {
             Type *ct=parse_type(p); expect(p,TK_RPAREN);
