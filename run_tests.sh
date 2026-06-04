@@ -83,6 +83,9 @@ run 26_loops      0  tests/26_loops.oh
 run 27_inttypes   0  tests/27_inttypes.oh
 run 28_corelib    0  std/core.oh tests/28_corelib.oh
 run 29_recursion  0  tests/29_recursion.oh
+run 30_builtins   0  tests/30_builtins.oh
+run 31_bool       0  tests/31_bool.oh
+run 32_json       0  std/core.oh std/str.oh std/json.oh tests/32_json.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh

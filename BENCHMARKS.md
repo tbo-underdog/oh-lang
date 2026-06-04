@@ -21,9 +21,9 @@ wins.
 | json (field extraction) | 0.06× | **OH faster** |
 | add | 0.19× | **OH faster** |
 | lsearch | 0.37× | **OH faster** |
-| bitflip (`popcount()` builtin) | 0.47× | **OH faster** |
 | abs | 0.49× | **OH faster** |
 | strscan (byte scan, mutable buffer) | 0.66× | **OH faster** |
+| bitflip_builtin (`popcount()` intrinsic) | 0.67× | **OH faster** |
 | vec (1M push + sum, fixed cap) | 0.87× | **OH faster** |
 | noalias (single-array kernel) | 0.91× | **OH faster** |
 | simd (`dot` builtin, vectorized) | 0.94× | **OH faster** |
@@ -33,10 +33,18 @@ wins.
 | buf (1M int appends, growable) | 1.16× | within bar |
 | max_array (small-array hot loop) | 1.16× | within bar |
 | math (ipow/isqrt loop) | 1.25× | within bar |
+| bitflip (hand-rolled popcount loop) | 1.64× | **over bar — see note** |
 | fibonacci (naive tree recursion) | 1.90× | **over bar — justified below** |
 
 **Acceptance bar: OH/C ≤ 1.5× (faster or roughly equal), or justified.**
-**16 of 17 within the bar; the lone exception (fibonacci) is named below.**
+**16 of 18 within the bar; the two over (fibonacci, hand-rolled bitflip) are explained below.**
+
+> **bitflip, the honest pair:** `bitflip` hand-rolls a 32-iteration popcount loop;
+> clang idiom-recognizes the *C* version into a single `popcnt` (so C is fast,
+> Oh 1.64×), while Oh's loop stays a loop. `bitflip_builtin` uses Oh's `popcount()`
+> intrinsic instead — which flips it to **0.67× (faster than C)** and is ~50× faster
+> in absolute time than the hand-rolled loop. That contrast is exactly why the
+> builtin exists: don't rely on the backend recognizing a hand-written idiom.
 
 ### Why Oh wins where it wins
 Stdlib/helpers and SIMD builtins are compiled *with* your program

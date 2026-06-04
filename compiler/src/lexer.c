@@ -51,6 +51,7 @@ const char *token_kind_name(TokenKind k) {
     case TK_INTLIT: return "INT";
     case TK_FLOATLIT: return "FLOAT";
     case TK_BOOLTRUE: return "T";
+    case TK_BOOLFALSE: return "F";
     case TK_STRLIT: return "STRLIT";
     case TK_EOF: return "EOF";
     default: return "?";
@@ -177,8 +178,9 @@ TokenArray lex(const char *src, Arena *a) {
             while (pos < srclen && is_ident_cont(src[pos])) { pos++; col++; }
             size_t len = pos - start;
             char *text = arena_strdup(a, src+start, len);
-            if (len == 1 && text[0] == 'T') tok.kind = TK_BOOLTRUE;
-            else                            tok.kind = TK_IDENT;
+            if      (len == 1 && text[0] == 'T') tok.kind = TK_BOOLTRUE;
+            else if (len == 1 && text[0] == 'F') tok.kind = TK_BOOLFALSE;
+            else                                 tok.kind = TK_IDENT;
             tok.text = text;
             DA_PUSH(&arr, tok, a);
             continue;

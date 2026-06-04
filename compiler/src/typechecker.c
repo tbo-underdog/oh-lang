@@ -275,7 +275,13 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
             return e->typ;
         }
         case UOP_DEREF:
-            if (ot->kind != TY_PTR) { fprintf(stderr, "Deref of non-pointer\n"); exit(1); }
+            /* `!` is deref on a pointer, but logical-NOT on a non-pointer
+             * (bool/int) — reinterpret so `!p` derefs and `!b` negates. */
+            if (ot->kind != TY_PTR) {
+                e->unop.op = UOP_NOT;
+                e->typ = make_type(a, TY_BOOL);
+                return e->typ;
+            }
             e->typ = clone_type(a, ot->inner);
             return e->typ;
         case UOP_BITNOT:

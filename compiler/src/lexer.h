@@ -50,6 +50,7 @@ typedef enum {
     TK_INTLIT,
     TK_FLOATLIT,
     TK_BOOLTRUE,   // T
+    TK_BOOLFALSE,  // F
     TK_STRLIT,     // "..."
 
     TK_EOF,

@@ -252,6 +252,9 @@ static Expr *parse_primary(Parser *p) {
     case TK_BOOLTRUE: {
         advance(p); Expr *e=new_expr(p,EX_BOOLLIT); e->bval=true; return e;
     }
+    case TK_BOOLFALSE: {
+        advance(p); Expr *e=new_expr(p,EX_BOOLLIT); e->bval=false; return e;
+    }
     case TK_STRLIT: {
         advance(p); Expr *e=new_expr(p,EX_STRLIT); e->sval=t.text; return e;
     }

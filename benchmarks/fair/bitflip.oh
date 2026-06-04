@@ -1,4 +1,8 @@
+#pc(x){
+n:=0
+@i,32{n=n+((x>>i)&1)}
+n}
 #main(){
 r:=0
-@i,50000000{r=r+popcount(i)+popcount(~i)}
+@i,5000000{r=r+pc(i)+pc(~i)}
 r&255}
