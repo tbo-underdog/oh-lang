@@ -35,5 +35,13 @@ chk 'Z x\nF\nK\n' '? + 0' "unknown verb -> ?, flush -> +, empty count 0"
 # still alive after flush
 chk 'S after flush_ok\nG after\n' '+ flush_ok' "alive after flush"
 
+# large value (2 KB) round-trips intact (bigger than the old 96-byte cap)
+BV=$(printf 'x%.0s' $(seq 1 2000))
+gv=$(printf 'S blob %s\nG blob\n' "$BV" | timeout 6 nc -q1 localhost 8092 2>/dev/null | sed -n '2p')
+if [ ${#gv} -eq 2000 ]; then echo "  PASS  2 KB value round-trip"; else echo "  FAIL  2 KB value: got ${#gv} bytes"; fail=1; fi
+# FIFO eviction: fill past the 3000-key cap, oldest must be evicted
+ev=$({ for i in $(seq 1 3005); do printf 'S k%d v%d\n' $i $i; done; printf 'K\nG k1\nG k3005\n'; } | timeout 60 nc -q1 localhost 8092 2>/dev/null | tail -3 | tr '\n' ' ' | sed 's/ $//')
+if [ "$ev" = "3000 _ v3005" ]; then echo "  PASS  eviction caps at 3000, oldest evicted"; else echo "  FAIL  eviction: '$ev' (want '3000 _ v3005')"; fail=1; fi
+
 kill $SRV 2>/dev/null
 [ $fail -eq 0 ] && echo "OHKV OK (arch=$ARCH)" || { echo "OHKV FAILED"; exit 1; }
