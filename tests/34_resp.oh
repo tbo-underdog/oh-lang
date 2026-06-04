@@ -1,0 +1,17 @@
+#main():3{
+buf:[64]1=0
+o:=resp_begin(buf,0,3)
+o=resp_arg(buf,o,"SET",3)
+o=resp_arg(buf,o,"foo",3)
+o=resp_arg(buf,o,"bar",3)
+?o!=31{\1}
+?memcmp(buf,"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n",31)!=0{\2}
+?resp_int(":42\r\n")!=42{\3}
+?resp_int(":-7\r\n")!=0-7{\4}
+?resp_isok("+OK\r\n")!=1{\5}
+?resp_isok("-ERR bad\r\n")!=0{\6}
+out:[16]1=0
+?resp_bulk("$5\r\nhello\r\n",out)!=5{\7}
+?memcmp(out,"hello",5)!=0{\8}
+?resp_bulk("$-1\r\n",out)!=0-1{\9}
+0}

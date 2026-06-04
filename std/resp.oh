@@ -1,0 +1,43 @@
+// resp: Redis RESP wire protocol (encode commands, decode replies). Pure byte
+// functions — no I/O — so they're fully unit-testable without a live server.
+// Needs std/core (itoa). The live client layers connect/send/recv on top.
+
+// ---- encode (build "*N\r\n$len\r\n<arg>\r\n..." into out) ----
+#resp_begin(out:c,off,n){
+out[off]=42
+o:=itoa(out,off+1,n)
+out[o]=13
+out[o+1]=10
+o+2}
+#resp_arg(out:c,off,s:c,sl){
+out[off]=36
+o:=itoa(out,off+1,sl)
+out[o]=13
+out[o+1]=10
+o=o+2
+@i,sl{out[o+i]=s[i]}
+o=o+sl
+out[o]=13
+out[o+1]=10
+o+2}
+
+// ---- decode replies ----
+// +simple / -error : 1 if success ('+'), 0 if error ('-')
+#resp_isok(buf:c){?buf[0]==43{\1} 0}
+// :integer\r\n -> the integer (handles negative)
+#resp_int(buf:c){
+i:=1
+neg:=0
+?buf[1]==45{neg=1 i=2}
+n:=0
+~buf[i]>=48&&buf[i]<=57{n=n*10+(3)buf[i]-48 i=i+1}
+neg==1?0-n:n}
+// $len\r\n<data>\r\n -> copies data into out, returns len; $-1 (nil) -> -1
+#resp_bulk(buf:c,out:c){
+?buf[1]==45{\0-1}
+len:=0
+i:=1
+~buf[i]>=48&&buf[i]<=57{len=len*10+(3)buf[i]-48 i=i+1}
+i=i+2
+@j,len{out[j]=buf[i+j]}
+len}

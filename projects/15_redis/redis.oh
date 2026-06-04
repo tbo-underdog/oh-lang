@@ -1,0 +1,27 @@
+// Minimal Redis client in Oh — SET then GET, over RESP, raw sockets, no libc.
+// Connects to 127.0.0.1:6379, sets greeting=hello, gets it back, prints it.
+// Needs std/core (itoa), std/net (connect_to), std/resp.
+#main(){
+fd:=connect_to(127,0,0,1,6379)
+?fd<0{\1}
+buf:[256]1=0
+o:=resp_begin(buf,0,3)
+o=resp_arg(buf,o,"SET",3)
+o=resp_arg(buf,o,"greeting",8)
+o=resp_arg(buf,o,"hello",5)
+sys(1,fd,&buf[0],o)
+rr:[256]1=0
+sys(0,fd,&rr[0],256)
+?resp_isok(&rr[0])!=1{\2}
+o=resp_begin(buf,0,2)
+o=resp_arg(buf,o,"GET",3)
+o=resp_arg(buf,o,"greeting",8)
+sys(1,fd,&buf[0],o)
+r2:[256]1=0
+sys(0,fd,&r2[0],256)
+val:[64]1=0
+vl:=resp_bulk(&r2[0],&val[0])
+sys(1,1,&val[0],vl)
+sys(1,1,"\n",1)
+sys(3,fd)
+0}

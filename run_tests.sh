@@ -87,6 +87,7 @@ run 30_builtins   0  tests/30_builtins.oh
 run 31_bool       0  tests/31_bool.oh
 run 32_json       0  std/core.oh std/str.oh std/json.oh tests/32_json.oh
 run 33_life       0  projects/13_life/life_core.oh tests/33_life.oh
+run 34_resp       0  std/core.oh std/resp.oh tests/34_resp.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh
