@@ -1,46 +1,54 @@
-# ohkv — a tiny key/value store in Oh
+# ohkv — a key/value store in Oh
 
-A minimal in-memory KV store over TCP, written in Oh with raw syscalls and no libc.
-The wire protocol is deliberately **AI-centric**: single-character verbs, one line
-per command — cheap for a model to emit and parse.
+An in-memory KV store over TCP, written in Oh with raw syscalls and no libc.
+Open-addressing hash table, persistent connections, and **input clamping so a
+client cannot crash or overflow it**. The wire protocol is AI-centric: single-char
+verbs, one line per command — cheap for a model to emit and parse.
 
 | command | reply | meaning |
 |---|---|---|
 | `S <key> <value>` | `+` | set / overwrite |
 | `G <key>` | `<value>` or `_` | get (`_` = missing) |
 | `D <key>` | `+` | delete |
+| `E <key>` | `1` or `0` | exists |
+| `I <key>` | `<n>` | increment numeric value, returns new value |
 | `K` | `<n>` | number of keys |
+| `F` | `+` | flush all |
+| *(unknown)* | `?` | unrecognized verb |
 
 ## Run
 ```sh
-./compiler/oh std/core.oh projects/15_kvstore/kv.oh -o ohkv
+./compiler/oh std/core.oh std/mem.oh projects/15_kvstore/kv.oh -o ohkv
 ./ohkv                       # listens on :8092
-# in another shell:
-printf 'S user alice\n' | nc -q1 localhost 8092   # +
-printf 'G user\n'       | nc -q1 localhost 8092   # alice
+# pipeline commands on one connection:
+printf 'S user alice\nG user\nI hits\nI hits\nK\n' | nc -q1 localhost 8092
+# -> +  alice  1  2  2
 ```
-State persists in the server process across connections. Builds freestanding
-(zero-dependency static binary) and on ARM64 the same way as the other projects.
+Connections are **persistent** (many commands per connection, line-buffered with
+partial-read handling). State lives in the server process and persists across
+connections. Builds freestanding (zero-dependency static binary) and on ARM64.
 
 ## Test
 ```sh
 ./projects/15_kvstore/test.sh             # native
 ARCH=arm64 ./projects/15_kvstore/test.sh  # freestanding aarch64 under qemu
 ```
+Covers every verb pipelined, cross-connection persistence, overwrite, oversized-input
+clamping, and unknown verbs — asserted on both arches.
+
+## Internals
+- **Hash table**: 8192 buckets, linear probing, tombstone deletes. `$Store` struct
+  holds the arrays (keys/vals/lengths/state) on an mmap heap, passed by pointer.
+- **Robust by construction**: keys are clamped to 32 bytes, values to 96, parsing is
+  bounded by the bytes actually read — no buffer can be overrun by any input.
+- ~5,700 keys at a safe load factor (configurable via the bucket count).
 
 ## Honest scope
-This is a **cache / KV store, not a database.** It is:
+A fast in-memory **cache / KV store**, not a durable database:
 - **in-memory only** — no disk persistence (restart = empty),
-- **bounded** — 256 keys, 32-byte keys, 64-byte values (fixed at compile time),
-- **linear-scan** — O(n) lookup (fine for small N; a hash index is the next step),
-- **single command per connection.**
+- **tombstone deletes** — heavy delete/insert churn grows probe chains; `F` (flush)
+  resets,
+- keys/values truncate at the size caps above.
 
-It demonstrates a real networked datastore in Oh — structs (`$Store`) for state,
-a heap-free fixed arena, pointer-to-struct passing, and raw-socket I/O — end-to-end
-tested on both arches. It is **not** a Redis/Mongo replacement.
-
-## On SQL / real DB clients
-A Redis (RESP) or Postgres client is straightforward to *write* from the protocol
-spec, but this repo only ships what it can **verify**, and no Redis/Postgres server
-was available to test against. So those clients are intentionally not included yet
-rather than shipped unvalidated — consistent with the project's "prove it" rule.
+It's a real, robust, networked datastore in Oh — not a Redis/Mongo replacement, but
+genuinely usable for caching and counters.
