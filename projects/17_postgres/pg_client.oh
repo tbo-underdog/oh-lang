@@ -1,0 +1,39 @@
+// Minimal PostgreSQL client in Oh — v3 wire protocol, raw sockets, no libc.
+// Startup (trust auth) -> CREATE/INSERT/SELECT round-trip -> print the value.
+// Needs std/core, std/net (connect_to), std/pg. Connects to 127.0.0.1:5432.
+#recv_msgs(fd:6,b:c){
+n:=0
+~pg_hasz(b,n)==0{
+r:=sys(0,fd,&b[n],8192-n)
+?r<=0{\n}
+n=n+(3)r
+}
+n}
+#runq(fd:6,b:c,sql:c):v{
+qb:[512]1=0
+o:=pg_query(qb,sql)
+sys(1,fd,&qb[0],o)
+recv_msgs(fd,b)}
+#main(){
+fd:=connect_to(127,0,0,1,5432)
+?fd<0{\1}
+b:[8192]1=0
+o:=pg_startup(b,"postgres","postgres")
+sys(1,fd,&b[0],o)
+recv_msgs(fd,b)
+?pg_authok(b)!=1{\2}
+runq(fd,b,"DROP TABLE IF EXISTS ohuser")
+runq(fd,b,"CREATE TABLE ohuser (name text)")
+runq(fd,b,"INSERT INTO ohuser VALUES ('alice')")
+qb:[512]1=0
+o=pg_query(qb,"SELECT name FROM ohuser")
+sys(1,fd,&qb[0],o)
+n:=recv_msgs(fd,b)
+d:=pg_find(b,n,68)
+?d<0{\3}
+out:[64]1=0
+vl:=pg_col0(b,d,out)
+sys(1,1,&out[0],vl)
+sys(1,1,"\n",1)
+sys(3,fd)
+0}

@@ -1,0 +1,79 @@
+// pg: PostgreSQL v3 frontend/backend wire protocol. BIG-ENDIAN integers (network
+// byte order) — the key gotcha vs BSON. Pure byte functions for building messages
+// and parsing responses; the live client adds connect/send/recv. Needs std/core.
+
+#be32w(b:c,off,v):v{
+b[off]=(1)((v>>24)&255)
+b[off+1]=(1)((v>>16)&255)
+b[off+2]=(1)((v>>8)&255)
+b[off+3]=(1)(v&255)}
+#be32r(b:c,off){
+(((3)b[off]&255)<<24)+(((3)b[off+1]&255)<<16)+(((3)b[off+2]&255)<<8)+((3)b[off+3]&255)}
+
+// StartupMessage: int32 len + int32 196608(proto 3.0) + "user\0<u>\0database\0<d>\0\0"
+#pg_startup(b:c,user:c,db:c){
+be32w(b,4,196608)
+o:=8
+o=bcopy(b,o,"user")
+b[o]=0
+o=o+1
+o=bcopy(b,o,user)
+b[o]=0
+o=o+1
+o=bcopy(b,o,"database")
+b[o]=0
+o=o+1
+o=bcopy(b,o,db)
+b[o]=0
+o=o+1
+b[o]=0
+o=o+1
+be32w(b,0,o)
+o}
+
+// Query ('Q'): type + int32 len + sql + \0
+#pg_query(b:c,sql:c){
+b[0]=81
+sl:=slen(sql)
+be32w(b,1,4+sl+1)
+o:=5
+o=bcopy(b,o,sql)
+b[o]=0
+o+1}
+
+// AuthenticationOk = first reply 'R'(82) with int32 subtype 0 (trust/ok)
+#pg_authok(b:c){
+?(3)b[0]!=82{\0}
+?be32r(b,5)!=0{\0}
+1}
+
+// is there a complete ReadyForQuery 'Z'(90) message within b[0..n)? (read-until)
+#pg_hasz(b:c,n){
+o:=0
+~o+5<=n{
+len:=be32r(b,o+1)
+?o+1+len>n{\0}
+?(3)b[o]==90{\1}
+o=o+1+len
+}
+0}
+
+// find first message of `type`; returns its offset (or -1)
+#pg_find(b:c,n,type){
+o:=0
+~o+5<=n{
+?(3)b[o]==type{\o}
+len:=be32r(b,o+1)
+?len<=0{\0-1}
+o=o+1+len
+}
+0-1}
+
+// extract column 0 of a DataRow 'D' message at msgoff into out; returns length (-1=null)
+#pg_col0(b:c,msgoff,out:c){
+p:=msgoff+7
+clen:=be32r(b,p)
+p=p+4
+?clen<0{\0-1}
+@i,clen{out[i]=b[p+i]}
+clen}
