@@ -1,0 +1,15 @@
+// Hex integer literals, including leading-zero nibbles (regression: lexer used to
+// split 0x0a into INTLIT 0 + IDENT x0a).
+#main():3{
+?0xff!=255{\1}
+?0x0a!=10{\2}
+?0xa0!=160{\3}
+?0x10!=16{\4}
+?0x00ff!=255{\5}
+?0x80000000!=2147483648{\6}
+?0xffffffff!=4294967295{\7}
+?0x0fc19dc6!=264347078{\8}
+?0x428a2f98!=1116352408{\9}
+?(0xdeadbeef&0xffff)!=0xbeef{\10}
+?(0x80000000>>4)!=0x08000000{\11}
+0}

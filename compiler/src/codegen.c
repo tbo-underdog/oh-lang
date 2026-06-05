@@ -712,6 +712,19 @@ static void emit_llvm_type(Type *t) {
 static int new_reg(void)  { return reg_ctr++; }
 static int new_label(void){ return lbl_ctr++; }
 
+/* Coerce a GEP element index to i64. Indices may come from i64 arithmetic; the
+ * GEP element-index operand is emitted as i64, so a narrower SSA value must be
+ * widened first. Constants and already-64-bit values pass through unchanged. */
+static int coerce_index_i64(Expr *idxe, int idx_reg) {
+    if (IS_CONST(idx_reg)) return idx_reg;
+    TypeKind k = (idxe && idxe->typ) ? idxe->typ->kind : TY_I32;
+    if (k == TY_I64 || k == TY_U64 || k == TY_PTR) return idx_reg;
+    int r = new_reg();
+    fprintf(out, "  %%t%d = %s %s %%t%d to i64\n",
+            r, is_signed_int(k) ? "sext" : "zext", llvm_scalar(k), idx_reg);
+    return r;
+}
+
 /* ------------------------------------------------------------------ */
 /* Expression emission                                                 */
 /*                                                                     */
@@ -1025,21 +1038,22 @@ static int emit_expr(Expr *e) {
                 Type *vt = var_slots[slot].type;
                 TypeKind ek = vt->inner ? vt->inner->kind : TY_I32;
                 int idx_reg = emit_expr(op->arridx.idx);
+                idx_reg = coerce_index_i64(op->arridx.idx, idx_reg);
                 int r = new_reg();
                 if (vt->kind == TY_ARRAY) {
                     fprintf(out, "  %%t%d = getelementptr [%llu x ",
                             r, (unsigned long long)vt->array_size);
                     emit_llvm_type(vt->inner);
-                    fprintf(out, "], ptr %%v%d, i32 0, i32 ", var_slots[slot].reg);
+                    fprintf(out, "], ptr %%v%d, i32 0, i64 ", var_slots[slot].reg);
                     emit_ref(idx_reg); fprintf(out, "\n");
                 } else if (var_slots[slot].direct_reg >= 0) {
-                    fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+                    fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i64 ",
                             r, llvm_scalar(ek), var_slots[slot].direct_reg);
                     emit_ref(idx_reg); fprintf(out, "\n");
                 } else {
                     int loaded = new_reg();
                     fprintf(out, "  %%t%d = load ptr, ptr %%v%d\n", loaded, var_slots[slot].reg);
-                    fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+                    fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i64 ",
                             r, llvm_scalar(ek), loaded);
                     emit_ref(idx_reg); fprintf(out, "\n");
                 }
@@ -1265,6 +1279,7 @@ static int emit_expr(Expr *e) {
     case EX_ARRAYIDX: {
         /* a%i  — index into array or pointer variable */
         int idx_reg = emit_expr(e->arridx.idx);
+        idx_reg = coerce_index_i64(e->arridx.idx, idx_reg);
         TypeKind ek = e->typ->kind;
 
         int slot_idx = vars_lookup(e->arridx.name);
@@ -1276,10 +1291,10 @@ static int emit_expr(Expr *e) {
             fprintf(out, "  %%t%d = getelementptr [%llu x ",
                     ptr_reg, (unsigned long long)vt->array_size);
             emit_llvm_type(vt->inner);
-            fprintf(out, "], ptr %%v%d, i32 0, i32 ", var_slots[slot_idx].reg);
+            fprintf(out, "], ptr %%v%d, i32 0, i64 ", var_slots[slot_idx].reg);
             emit_ref(idx_reg); fprintf(out, "\n");
         } else if (var_slots[slot_idx].direct_reg >= 0) {
-            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i64 ",
                     ptr_reg,
                     llvm_scalar(vt->inner ? vt->inner->kind : TY_I32),
                     var_slots[slot_idx].direct_reg);
@@ -1290,7 +1305,7 @@ static int emit_expr(Expr *e) {
             int loaded_ptr = new_reg();
             fprintf(out, "  %%t%d = load ptr, ptr %%v%d\n",
                     loaded_ptr, var_slots[slot_idx].reg);
-            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i64 ",
                     ptr_reg,
                     llvm_scalar(vt->inner ? vt->inner->kind : TY_I32),
                     loaded_ptr);
@@ -1442,6 +1457,7 @@ static int emit_expr(Expr *e) {
 /* Store value register into the array element name%idx */
 static void store_arrayidx(const char *name, Expr *idx_expr, int val_reg, TypeKind ek) {
     int idx_reg = emit_expr(idx_expr);
+    idx_reg = coerce_index_i64(idx_expr, idx_reg);
     int slot_idx = vars_lookup(name);
     assert(slot_idx >= 0);
     Type *vt = var_slots[slot_idx].type;
@@ -1451,10 +1467,10 @@ static void store_arrayidx(const char *name, Expr *idx_expr, int val_reg, TypeKi
         fprintf(out, "  %%t%d = getelementptr [%llu x ",
                 ptr_reg, (unsigned long long)vt->array_size);
         emit_llvm_type(vt->inner);
-        fprintf(out, "], ptr %%v%d, i32 0, i32 %%t%d\n",
+        fprintf(out, "], ptr %%v%d, i32 0, i64 %%t%d\n",
                 var_slots[slot_idx].reg, idx_reg);
     } else {
-        fprintf(out, "  %%t%d = getelementptr %s, ptr %%v%d, i32 %%t%d\n",
+        fprintf(out, "  %%t%d = getelementptr %s, ptr %%v%d, i64 %%t%d\n",
                 ptr_reg, llvm_scalar(vt->inner ? vt->inner->kind : TY_I32),
                 var_slots[slot_idx].reg, idx_reg);
     }
@@ -1571,21 +1587,22 @@ static void emit_stmt(Stmt *s) {
         Type *vt2 = var_slots[slot2].type;
         TypeKind ek2 = vt2->inner ? vt2->inner->kind : TY_I32;
         int idx_reg = emit_expr(s->idxassign.idx);
+        idx_reg = coerce_index_i64(s->idxassign.idx, idx_reg);
         int ptr_reg = new_reg();
         if (vt2->kind == TY_ARRAY) {
             fprintf(out, "  %%t%d = getelementptr [%llu x ",
                     ptr_reg, (unsigned long long)vt2->array_size);
             emit_llvm_type(vt2->inner);
-            fprintf(out, "], ptr %%v%d, i32 0, i32 ", var_slots[slot2].reg);
+            fprintf(out, "], ptr %%v%d, i32 0, i64 ", var_slots[slot2].reg);
             emit_ref(idx_reg); fprintf(out, "\n");
         } else if (var_slots[slot2].direct_reg >= 0) {
-            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i64 ",
                     ptr_reg, llvm_scalar(ek2), var_slots[slot2].direct_reg);
             emit_ref(idx_reg); fprintf(out, "\n");
         } else {
             int loaded = new_reg();
             fprintf(out, "  %%t%d = load ptr, ptr %%v%d\n", loaded, var_slots[slot2].reg);
-            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i32 ",
+            fprintf(out, "  %%t%d = getelementptr %s, ptr %%t%d, i64 ",
                     ptr_reg, llvm_scalar(ek2), loaded);
             emit_ref(idx_reg); fprintf(out, "\n");
         }

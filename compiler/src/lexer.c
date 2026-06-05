@@ -7,6 +7,7 @@ static bool is_ident_cont(char c) {
     return is_ident_start(c) || (c >= '0' && c <= '9');
 }
 static bool is_digit(char c) { return c >= '0' && c <= '9'; }
+static bool is_hex(char c) { return is_digit(c) || (c>='a'&&c<='f') || (c>='A'&&c<='F'); }
 
 const char *token_kind_name(TokenKind k) {
     switch(k) {
@@ -189,6 +190,14 @@ TokenArray lex(const char *src, Arena *a) {
         /* number */
         if (is_digit(c)) {
             bool is_float = false;
+            if (c == '0' && pos+1 < srclen && (src[pos+1]=='x' || src[pos+1]=='X')) {
+                pos += 2; col += 2;                       /* hex literal: 0x... */
+                while (pos < srclen && is_hex(src[pos])) { pos++; col++; }
+                tok.kind = TK_INTLIT;
+                tok.text = arena_strdup(a, src+start, pos-start);
+                DA_PUSH(&arr, tok, a);
+                continue;
+            }
             while (pos < srclen && is_digit(src[pos])) { pos++; col++; }
             if (pos < srclen && src[pos] == '.') {
                 is_float = true;

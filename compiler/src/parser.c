@@ -243,7 +243,8 @@ static Expr *parse_primary(Parser *p) {
     switch(t.kind) {
     case TK_INTLIT: {
         advance(p); Expr *e=new_expr(p,EX_INTLIT);
-        e->ival=(int64_t)strtoll(t.text,NULL,10); return e;
+        int base = (t.text[0]=='0' && (t.text[1]=='x'||t.text[1]=='X')) ? 16 : 10;
+        e->ival=(int64_t)strtoll(t.text,NULL,base); return e;
     }
     case TK_FLOATLIT: {
         advance(p); Expr *e=new_expr(p,EX_FLOATLIT);

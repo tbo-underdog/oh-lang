@@ -1,0 +1,23 @@
+// SHA-256 / HMAC-SHA256 / PBKDF2-HMAC-SHA256 against known vectors.
+// Output is hex-encoded into a buffer and compared to literal hex strings.
+#tohex(b:c,n,out:c):v{
+hd:="0123456789abcdef"
+@i,n{out[i*2]=hd[((3)b[i]>>4)&15] out[i*2+1]=hd[(3)b[i]&15]}}
+#main():3{
+o:[32]1=0
+hx:[66]1=0
+sha256("abc",3,o) tohex(o,32,hx)
+?memcmp(hx,"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",64)!=0{\1}
+sha256("",0,o) tohex(o,32,hx)
+?memcmp(hx,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",64)!=0{\2}
+// 56-byte message: exercises the 2-block padding boundary that found the ld32 bug
+sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",56,o) tohex(o,32,hx)
+?memcmp(hx,"248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",64)!=0{\3}
+k:[20]1=0 @i,20{k[i]=(1)0x0b}
+hmac(k,20,"Hi There",8,o) tohex(o,32,hx)
+?memcmp(hx,"b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",64)!=0{\4}
+pbkdf2("password",8,"salt",4,1,o) tohex(o,32,hx)
+?memcmp(hx,"120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b",64)!=0{\5}
+pbkdf2("password",8,"salt",4,4096,o) tohex(o,32,hx)
+?memcmp(hx,"c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a",64)!=0{\6}
+0}
