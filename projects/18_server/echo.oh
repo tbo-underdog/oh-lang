@@ -1,0 +1,42 @@
+// Single-threaded epoll echo server — proves the event loop handles many concurrent
+// connections on one thread. Level-triggered. Needs std/core, std/net.
+// A client line "quit\n" makes the server reply then exit (test hook).
+#main(){
+port:=7000
+lfd:=listen_on(port)
+?lfd<0{\1}
+ep:=epoll_new()
+?ep<0{\2}
+epoll_add(ep,lfd,1)
+evs:[1024]1=0
+buf:[4096]1=0
+~1{
+n:=epoll_wait_n(ep,evs,64,-1)
+?n<0{\3}
+i:=0
+~i<n{
+fd:=ev_fd(evs,i)
+?fd==lfd{
+cfd:=accept_nb(lfd)
+~cfd>=0{
+set_nonblock(cfd)
+epoll_add(ep,cfd,1)
+cfd=accept_nb(lfd)
+}
+}:{
+r:=sys(0,fd,&buf[0],4096)
+?r<=0{
+epoll_del(ep,fd)
+sys(3,fd)
+}:{
+sys(1,fd,&buf[0],r)
+?r>=4&&(3)buf[0]==113&&(3)buf[1]==117&&(3)buf[2]==105&&(3)buf[3]==116{
+sys(3,fd)
+sys(3,lfd)
+\0}
+}
+}
+i=i+1
+}
+}
+0}

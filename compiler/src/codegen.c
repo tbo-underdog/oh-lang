@@ -48,6 +48,13 @@ static long remap_syscall_x86_to_arm64(long n) {
     case 50: return 201;  /* listen */
     case 54: return 208;  /* setsockopt */
     case 60: return 93;   /* exit */
+    case 72: return 25;   /* fcntl */
+    case 228: return 113; /* clock_gettime */
+    case 233: return 21;  /* epoll_ctl */
+    case 281: return 22;  /* epoll_pwait (arm64 has no epoll_wait) */
+    case 288: return 242; /* accept4 */
+    case 291: return 20;  /* epoll_create1 */
+    case 318: return 278; /* getrandom */
     default: return n;    /* assume same (read/write family already differ above) */
     }
 }
@@ -523,7 +530,7 @@ static int g_wret_flag[MAX_FUNCS];
 static int func_is_wret(const char *name) {
     if (strcmp(name,"sys")==0) return 0;                 /* may block (accept/read) */
     if (strcmp(name,"popcount")==0||strcmp(name,"clz")==0||
-        strcmp(name,"ctz")==0||strcmp(name,"bswap")==0) return 1; /* instant intrinsics */
+        strcmp(name,"ctz")==0||strcmp(name,"bswap")==0||strcmp(name,"archid")==0) return 1; /* instant intrinsics */
     for (int i=0;i<g_pure_count;i++)
         if (strcmp(g_pure_names[i],name)==0) return g_wret_flag[i];
     return 0;
@@ -1193,6 +1200,10 @@ static int emit_expr(Expr *e) {
             return r2;
         }
 
+        /* archid() → compile-time arch constant (0=x86_64, 1=aarch64). */
+        if (strcmp(e->call.name,"archid")==0) {
+            return new_iconst(target_is_aarch64() ? 1 : 0);
+        }
         /* Bit intrinsics → single hardware instruction. */
         if (strcmp(e->call.name,"popcount")==0 || strcmp(e->call.name,"clz")==0 ||
             strcmp(e->call.name,"ctz")==0 || strcmp(e->call.name,"bswap")==0) {

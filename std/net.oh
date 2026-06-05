@@ -8,3 +8,58 @@ sa[8]=0 sa[9]=0 sa[10]=0 sa[11]=0 sa[12]=0 sa[13]=0 sa[14]=0 sa[15]=0
 ?sys(42,fd,&sa,16)<0{\-2}
 fd}
 #status(b:c){(3)(b[9])*100+(3)(b[10])*10+(3)(b[11])-5328}
+
+// ---- event-loop server primitives (epoll, edge/level-triggered) ----
+// monotonic nanoseconds (clock_gettime CLOCK_MONOTONIC)
+#now_ns():6{ts:[2]6=0 sys(228,1,&ts[0]) ts[0]*1000000000+ts[1]}
+// fill n random bytes (getrandom)
+#rand_bytes(b:c,n):v{sys(318,&b[0],n,0)}
+// mark fd non-blocking (fcntl F_GETFL=3 / F_SETFL=4, O_NONBLOCK=0o4000)
+#set_nonblock(fd:6):v{fl:=sys(72,fd,3,0) sys(72,fd,4,fl|2048)}
+// listen on 0.0.0.0:port (SO_REUSEADDR+SO_REUSEPORT, non-blocking). fd or <0.
+#listen_on(port):6{
+fd:=sys(41,2,1,0)
+?fd<0{\0-1}
+one:[4]1=0
+one[0]=1
+sys(54,fd,1,2,&one[0],4)
+sys(54,fd,1,15,&one[0],4)
+sa:[16]1=0
+sa[0]=2
+sa[2]=(1)(port/256)
+sa[3]=(1)(port%256)
+?sys(49,fd,&sa[0],16)<0{\0-2}
+?sys(50,fd,128)<0{\0-3}
+set_nonblock(fd)
+fd}
+// accept4 with SOCK_NONBLOCK (0o4000) — new client fd, or <0 on EAGAIN
+#accept_nb(lfd:6):6{sys(288,lfd,0,0,2048)}
+// epoll_event ABI differs by arch: x86 packed(size 12,data@4), arm64(size 16,data@8)
+#ev_size():6{12+archid()*4}
+#ev_dataoff():6{4+archid()*4}
+// build one epoll_event (events mask + data=fd) into buf
+#ev_set(buf:c,events,fd:6):v{
+buf[0]=(1)(events&255)
+buf[1]=(1)((events>>8)&255)
+buf[2]=(1)((events>>16)&255)
+buf[3]=(1)((events>>24)&255)
+d:=ev_dataoff()
+@i,8{buf[d+i]=(1)((fd>>(i*8))&255)}}
+// read fd stored in event #i of an epoll_wait result buffer
+#ev_fd(buf:c,i):6{
+o:=i*ev_size()+ev_dataoff()
+v:=(6)0
+@k,8{v=v|(((6)buf[o+k]&255)<<(k*8))}
+v}
+// read events mask of event #i
+#ev_events(buf:c,i):6{
+o:=i*ev_size()
+((6)buf[o]&255)|(((6)buf[o+1]&255)<<8)|(((6)buf[o+2]&255)<<16)|(((6)buf[o+3]&255)<<24)}
+#epoll_new():6{sys(291,0)}
+#epoll_add(ep:6,fd:6,events):6{
+ev:[16]1=0
+ev_set(ev,events,fd)
+sys(233,ep,1,fd,&ev[0])}
+#epoll_del(ep:6,fd:6):6{sys(233,ep,2,fd,0)}
+// wait up to maxev events into evbuf (sized maxev*ev_size()); timeout ms (-1=block)
+#epoll_wait_n(ep:6,evbuf:c,maxev,timeout):6{sys(281,ep,&evbuf[0],maxev,timeout,0,0)}

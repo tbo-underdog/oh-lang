@@ -1,0 +1,15 @@
+// epoll_event ABI helpers — arch-portable layout (archid) + ev_set/ev_fd/ev_events
+// roundtrip incl the EPOLLET high bit. Offline (no syscalls).
+#main():3{
+?archid()!=0&&archid()!=1{\1}
+?ev_size()!=12+archid()*4{\2}
+?ev_dataoff()!=4+archid()*4{\3}
+ev:[16]1=0
+ev_set(ev,5,12345)
+?ev_events(ev,0)!=5{\4}
+?ev_fd(ev,0)!=12345{\5}
+ev2:[16]1=0
+ev_set(ev2,2147483649,7)
+?ev_events(ev2,0)!=2147483649{\6}
+?ev_fd(ev2,0)!=7{\7}
+0}

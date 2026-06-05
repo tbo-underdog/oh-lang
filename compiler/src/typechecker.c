@@ -309,6 +309,12 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
             e->typ = make_type(a, TY_I64);
             return e->typ;
         }
+        /* archid() -> compile-time arch constant (0=x86_64, 1=aarch64). Lets source
+         * portably handle ABI-divergent structs (e.g. struct epoll_event). i64. */
+        if (strcmp(e->call.name,"archid")==0) {
+            e->typ = make_type(a, TY_I64);
+            return e->typ;
+        }
         /* Bit intrinsics: popcount/clz/ctz/bswap — 1 int arg, return i32. */
         if (strcmp(e->call.name,"popcount")==0 || strcmp(e->call.name,"clz")==0 ||
             strcmp(e->call.name,"ctz")==0 || strcmp(e->call.name,"bswap")==0) {
