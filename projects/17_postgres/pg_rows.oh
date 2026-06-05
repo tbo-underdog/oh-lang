@@ -1,0 +1,58 @@
+// Probe using ONLY the shipped std/pg.oh row API (pg_nextrow/pg_ncols/pg_coln).
+#recv_msgs(fd:6,b:c){
+n:=0
+~pg_hasz(b,n)==0{
+r:=sys(0,fd,&b[n],8192-n)
+?r<=0{\n}
+n=n+(3)r
+}
+n}
+#dump_rows(b:c,n):v{
+col:[256]1=0
+d:=pg_nextrow(b,n,0)
+~d>=0{
+nc:=pg_ncols(b,d)
+@ci,nc{
+cl:=pg_coln(b,d,ci,col)
+@i,cl{sys(1,1,&col[i],1)}
+?ci+1<nc{sys(1,1,"|",1)}
+}
+sys(1,1,"\n",1)
+d=pg_nextrow(b,n,d+pg_msglen(b,d))
+}
+}
+#runq(fd:6,b:c,sql:c){
+qb:[1024]1=0
+o:=pg_query(qb,sql)
+sys(1,fd,&qb[0],o)
+recv_msgs(fd,b)}
+#sel(fd:6,b:c,sql:c):v{
+n:=runq(fd,b,sql)
+dump_rows(b,n)}
+#main(){
+fd:=connect_to(127,0,0,1,5432)
+?fd<0{\1}
+b:[8192]1=0
+o:=pg_startup(b,"postgres","postgres")
+sys(1,fd,&b[0],o)
+recv_msgs(fd,b)
+?pg_authok(b)!=1{\2}
+runq(fd,b,"DROP TABLE IF EXISTS t")
+runq(fd,b,"CREATE TABLE t (id int, name text, score numeric)")
+runq(fd,b,"INSERT INTO t VALUES (1,'alice',9.5),(2,'bob',7),(3,'carol',8.25)")
+sys(1,1,"== all ==\n",10)
+sel(fd,b,"SELECT id,name,score FROM t ORDER BY id")
+sys(1,1,"== where id=2 ==\n",17)
+sel(fd,b,"SELECT name FROM t WHERE id=2")
+sys(1,1,"== count ==\n",12)
+sel(fd,b,"SELECT count(*) FROM t")
+runq(fd,b,"UPDATE t SET name='ALICE' WHERE id=1")
+sys(1,1,"== after update ==\n",19)
+sel(fd,b,"SELECT name FROM t WHERE id=1")
+runq(fd,b,"DELETE FROM t WHERE id=3")
+sys(1,1,"== after delete (count) ==\n",27)
+sel(fd,b,"SELECT count(*) FROM t")
+sys(1,1,"== nulltest ==\n",15)
+sel(fd,b,"SELECT id, name FROM (VALUES (5, NULL::text)) AS x(id,name)")
+sys(3,fd)
+0}

@@ -69,11 +69,38 @@ o=o+1+len
 }
 0-1}
 
-// extract column 0 of a DataRow 'D' message at msgoff into out; returns length (-1=null)
-#pg_col0(b:c,msgoff,out:c){
+// total on-wire length of the message at off (type byte + int32 len field + payload)
+#pg_msglen(b:c,off){1+be32r(b,off+1)}
+
+// number of columns in the DataRow 'D' message at msgoff (int16, big-endian)
+#pg_ncols(b:c,msgoff){(((3)b[msgoff+5]&255)<<8)+((3)b[msgoff+6]&255)}
+
+// extract column `col` (0-based) of the DataRow at msgoff into out; returns length
+// (-1 = SQL NULL). Walks the preceding columns to find the right offset.
+#pg_coln(b:c,msgoff,col,out:c){
 p:=msgoff+7
+ci:=0
+~ci<col{
+cl:=be32r(b,p)
+p=p+4
+?cl>0{p=p+cl}
+ci=ci+1}
 clen:=be32r(b,p)
 p=p+4
 ?clen<0{\0-1}
 @i,clen{out[i]=b[p+i]}
 clen}
+
+// column 0 (back-compat shorthand for pg_coln(...,0,...))
+#pg_col0(b:c,msgoff,out:c){pg_coln(b,msgoff,0,out)}
+
+// offset of the next DataRow 'D'(68) at/after `from` within b[0..n); -1 if none.
+// Iterate: d:=pg_nextrow(b,n,0) ~d>=0{ ... d=pg_nextrow(b,n,d+pg_msglen(b,d)) }
+#pg_nextrow(b:c,n,from){
+o:=from
+~o+5<=n{
+?(3)b[o]==68{\o}
+len:=be32r(b,o+1)
+?len<=0{\0-1}
+o=o+1+len}
+0-1}
