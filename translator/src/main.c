@@ -62,25 +62,33 @@ static void print_type(Type *t) {
 static int expr_prec(Expr *e) {
     if (!e) return 100;
     if (e->kind == EX_BINOP) {
-        switch (e->binop.op) {
-        case OP_OR:   return 1;
-        case OP_AND:  return 2;
+        switch (e->binop.op) {        /* higher binds tighter (C-like) */
+        case OP_OR:     return 1;
+        case OP_AND:    return 2;
+        case OP_BITOR:  return 3;
+        case OP_XOR:    return 4;
+        case OP_BITAND: return 5;
         case OP_EQ:
-        case OP_NEQ:  return 3;
+        case OP_NEQ:    return 6;
         case OP_LT:
         case OP_GT:
         case OP_LTEQ:
-        case OP_GTEQ: return 4;
+        case OP_GTEQ:   return 7;
+        case OP_LSHIFT:
+        case OP_RSHIFT: return 8;
         case OP_ADD:
-        case OP_SUB:  return 5;
+        case OP_SUB:    return 9;
         case OP_MUL:
         case OP_DIV:
-        case OP_MOD:  return 6;
+        case OP_MOD:    return 10;
         }
     }
-    if (e->kind == EX_UNOP) return 7;
-    return 10; /* atoms */
+    if (e->kind == EX_UNOP) return 11;
+    return 12; /* atoms */
 }
+/* parent precedence used when printing the operand of a unary op or a cast:
+ * above every binary operator, so any binop operand is parenthesized. */
+#define UNARY_OPND_PREC 11
 
 static const char *binop_str(BinOp op) {
     switch (op) {
@@ -146,11 +154,11 @@ static void print_expr(Expr *e) {
         switch (e->unop.op) {
         case UOP_NEG:
             printf("-");
-            print_expr_paren(e->unop.operand, 8);
+            print_expr_paren(e->unop.operand, UNARY_OPND_PREC);
             return;
         case UOP_NOT:
             printf("!");
-            print_expr_paren(e->unop.operand, 8);
+            print_expr_paren(e->unop.operand, UNARY_OPND_PREC);
             return;
         case UOP_ADDROF:
             printf("&");
@@ -158,11 +166,11 @@ static void print_expr(Expr *e) {
             return;
         case UOP_DEREF:
             printf("*");
-            print_expr_paren(e->unop.operand, 8);
+            print_expr_paren(e->unop.operand, UNARY_OPND_PREC);
             return;
         case UOP_BITNOT:
             printf("~");
-            print_expr_paren(e->unop.operand, 8);
+            print_expr_paren(e->unop.operand, UNARY_OPND_PREC);
             return;
         }
         return;
@@ -201,7 +209,7 @@ static void print_expr(Expr *e) {
         printf("(");
         print_type(e->cast.to);
         printf(")");
-        print_expr_paren(e->cast.operand, 8);
+        print_expr_paren(e->cast.operand, UNARY_OPND_PREC);
         return;
     case EX_FIELD:
         printf("%s.%s", e->field.var, e->field.field);
