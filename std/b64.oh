@@ -1,0 +1,53 @@
+// base64 encode/decode (standard alphabet, '=' padding). Pure byte functions.
+// Needs std/core. Used by SCRAM-SHA-256 (salt + client proof are base64).
+
+// encode in[0..n) -> out (base64 text); returns output length. out must hold
+// ceil(n/3)*4 bytes.
+#b64enc(in:c,n,out:c){
+al:="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+o:=0
+i:=0
+~i+3<=n{
+v:=(((3)in[i]&255)<<16)|(((3)in[i+1]&255)<<8)|((3)in[i+2]&255)
+out[o]=al[(v>>18)&63] out[o+1]=al[(v>>12)&63] out[o+2]=al[(v>>6)&63] out[o+3]=al[v&63]
+o=o+4 i=i+3}
+r:=n-i
+?r==1{
+v:=((3)in[i]&255)<<16
+out[o]=al[(v>>18)&63] out[o+1]=al[(v>>12)&63] out[o+2]=(1)61 out[o+3]=(1)61
+o=o+4}
+?r==2{
+v:=(((3)in[i]&255)<<16)|(((3)in[i+1]&255)<<8)
+out[o]=al[(v>>18)&63] out[o+1]=al[(v>>12)&63] out[o+2]=al[(v>>6)&63] out[o+3]=(1)61
+o=o+4}
+o}
+
+// decode value of one base64 char (A-Z=0..,a-z=26..,0-9=52..,+=62,/=63); -1 otherwise
+#b64val(ch){
+c:=(3)ch&255
+?c>=65&&c<=90{\c-65}
+?c>=97&&c<=122{\c-71}
+?c>=48&&c<=57{\c+4}
+?c==43{\62}
+?c==47{\63}
+0-1}
+
+// decode base64 text in[0..n) -> out (raw bytes); returns output length. Stops at
+// '=' padding. out must hold n/4*3 bytes.
+#b64dec(in:c,n,out:c){
+o:=0
+i:=0
+~i+4<=n{
+a:=b64val(in[i])
+?a<0{\o}
+b:=b64val(in[i+1])
+c:=b64val(in[i+2])
+d:=b64val(in[i+3])
+v:=(a<<18)|(b<<12)
+?c>=0{v=v|(c<<6)}
+?d>=0{v=v|d}
+out[o]=(1)((v>>16)&255) o=o+1
+?c>=0{out[o]=(1)((v>>8)&255) o=o+1}
+?d>=0{out[o]=(1)(v&255) o=o+1}
+i=i+4}
+o}

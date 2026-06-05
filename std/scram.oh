@@ -1,0 +1,29 @@
+// SCRAM-SHA-256 (RFC 5802 / RFC 7677) client computations. Needs std/core,
+// std/sha256, std/b64. Lets Oh authenticate to password-protected PostgreSQL.
+//
+// Flow (caller drives the wire I/O):
+//   SaltedPassword = PBKDF2-HMAC-SHA256(password, salt, iter)   [scram_salted]
+//   ClientKey      = HMAC(SaltedPassword, "Client Key")
+//   StoredKey      = SHA256(ClientKey)
+//   ClientSignature= HMAC(StoredKey, AuthMessage)
+//   ClientProof    = ClientKey XOR ClientSignature              [scram_proof -> base64]
+//   ServerSignature= HMAC(HMAC(SaltedPassword,"Server Key"), AuthMessage) [scram_serversig]
+// where AuthMessage = client-first-bare ,server-first, client-final-without-proof
+
+// SaltedPassword (32 bytes) into out.
+#scram_salted(pass:c,plen,salt:c,slen,iter,out:c):v{pbkdf2(pass,plen,salt,slen,iter,out)}
+
+// base64 ClientProof into out; returns its length. sp = SaltedPassword (32 bytes).
+#scram_proof(sp:c,authmsg:c,authlen,out:c){
+ck:[32]1=0 hmac(sp,32,"Client Key",10,ck)
+sk:[32]1=0 sha256(ck,32,sk)
+cs:[32]1=0 hmac(sk,32,authmsg,authlen,cs)
+pf:[32]1=0 @i,32{pf[i]=(1)((3)ck[i]^(3)cs[i])}
+b64enc(pf,32,out)}
+
+// base64 ServerSignature into out; returns its length. For verifying the server's
+// final message (v=...). sp = SaltedPassword (32 bytes).
+#scram_serversig(sp:c,authmsg:c,authlen,out:c){
+sek:[32]1=0 hmac(sp,32,"Server Key",10,sek)
+ss:[32]1=0 hmac(sek,32,authmsg,authlen,ss)
+b64enc(ss,32,out)}

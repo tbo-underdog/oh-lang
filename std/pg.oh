@@ -47,6 +47,36 @@ o+1}
 ?be32r(b,5)!=0{\0}
 1}
 
+// Authentication request subtype of an 'R'(82) message at offset 0: 0=Ok, 10=SASL,
+// 11=SASLContinue, 12=SASLFinal. Returns -1 if not an 'R' message.
+#pg_authtype(b:c){?(3)b[0]!=82{\0-1} be32r(b,5)}
+
+// Payload of an 'R' message at offset 0 (the bytes after type+len+subtype): copies
+// into out, returns length. For SASLContinue this is the server-first-message; for
+// SASLFinal it is "v=<base64 server signature>".
+#pg_rpayload(b:c,out:c){
+plen:=be32r(b,1)-8
+@i,plen{out[i]=b[9+i]}
+plen}
+
+// SASLInitialResponse 'p': mechanism name (cstr) + int32 initial-response-len + the
+// initial response bytes. Returns total message length.
+#pg_sasl_init(b:c,mech:c,ir:c,irlen){
+b[0]=(1)112
+o:=5
+o=bcopy(b,o,mech) b[o]=0 o=o+1
+be32w(b,o,irlen) o=o+4
+@i,irlen{b[o+i]=ir[i]} o=o+irlen
+be32w(b,1,o-1)
+o}
+
+// SASLResponse 'p': just int32 len + data (the client-final-message). Returns length.
+#pg_sasl_resp(b:c,data:c,dlen){
+b[0]=(1)112
+@i,dlen{b[5+i]=data[i]}
+be32w(b,1,4+dlen)
+5+dlen}
+
 // is there a complete ReadyForQuery 'Z'(90) message within b[0..n)? (read-until)
 #pg_hasz(b:c,n){
 o:=0

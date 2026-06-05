@@ -1,0 +1,16 @@
+// SCRAM-SHA-256 client proof + server signature — RFC 7677 test vector.
+#main():3{
+salt:[32]1=0
+sl:=b64dec("W22ZaJ0SNY7soEsUEjb6gQ==",24,salt)
+?sl!=16{\1}
+sp:[32]1=0
+scram_salted("pencil",6,salt,sl,4096,sp)
+am:="n=user,r=rOprNGfwEbeRWgbNEkqO,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096,c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
+out:[64]1=0
+pl:=scram_proof(sp,am,slen(am),out)
+?pl!=44{\2}
+?memcmp(out,"dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=",44)!=0{\3}
+so:[64]1=0
+ssl:=scram_serversig(sp,am,slen(am),so)
+?memcmp(so,"6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=",44)!=0{\4}
+0}

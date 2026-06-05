@@ -1,0 +1,22 @@
+// base64 encode/decode — RFC 4648 vectors + high-bit bytes.
+#main():3{
+out:[128]1=0
+// encode vectors (RFC 4648): ""->"", "f"->"Zg==", "fo"->"Zm8=", "foo"->"Zm9v",
+// "foob"->"Zm9vYg==", "fooba"->"Zm9vYmE=", "foobar"->"Zm9vYmFy"
+?b64enc("",0,out)!=0{\1}
+?b64enc("f",1,out)!=4{\2} ?memcmp(out,"Zg==",4)!=0{\3}
+?b64enc("fo",2,out)!=4{\4} ?memcmp(out,"Zm8=",4)!=0{\5}
+?b64enc("foo",3,out)!=4{\6} ?memcmp(out,"Zm9v",4)!=0{\7}
+?b64enc("foob",4,out)!=8{\8} ?memcmp(out,"Zm9vYg==",8)!=0{\9}
+?b64enc("fooba",5,out)!=8{\10} ?memcmp(out,"Zm9vYmE=",8)!=0{\11}
+?b64enc("foobar",6,out)!=8{\12} ?memcmp(out,"Zm9vYmFy",8)!=0{\13}
+// decode round-trips
+d:[128]1=0
+?b64dec("Zm9vYmFy",8,d)!=6{\14} ?memcmp(d,"foobar",6)!=0{\15}
+?b64dec("Zm9vYg==",8,d)!=4{\16} ?memcmp(d,"foob",4)!=0{\17}
+?b64dec("Zm8=",4,d)!=2{\18} ?memcmp(d,"fo",2)!=0{\19}
+// encode bytes with high bit set
+hb:[3]1=0 hb[0]=(1)0xff hb[1]=(1)0x80 hb[2]=(1)0xfe
+?b64enc(hb,3,out)!=4{\20} ?memcmp(out,"/4D+",4)!=0{\21}
+?b64dec("/4D+",4,d)!=3{\22} ?(((3)d[0]&255)!=255||((3)d[1]&255)!=128||((3)d[2]&255)!=254){\23}
+0}

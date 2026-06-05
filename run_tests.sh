@@ -92,6 +92,8 @@ run 35_bson       0  std/core.oh std/bson.oh tests/35_bson.oh
 run 36_pg         0  std/core.oh std/pg.oh tests/36_pg.oh
 run 37_sha256     0  std/core.oh std/sha256.oh tests/37_sha256.oh
 run 38_hexlit     0  tests/38_hexlit.oh
+run 39_b64        0  std/core.oh std/b64.oh tests/39_b64.oh
+run 40_scram      0  std/core.oh std/sha256.oh std/b64.oh std/scram.oh tests/40_scram.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh
