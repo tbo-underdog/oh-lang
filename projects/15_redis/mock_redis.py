@@ -27,6 +27,10 @@ def main():
                 elif v==b'GET':
                     x=store.get(cmd[1])
                     c.send(b'$-1\r\n' if x is None else b'$%d\r\n%s\r\n'%(len(x),x))
+                elif v==b'INCR':
+                    store[cmd[1]]=str(int(store.get(cmd[1],b'0'))+1).encode(); c.send(b':%d\r\n'%int(store[cmd[1]]))
+                elif v==b'DEL':
+                    c.send(b':%d\r\n'%(1 if store.pop(cmd[1],None) is not None else 0))
                 else: c.send(b'-ERR unknown\r\n')
         c.close()
 main()

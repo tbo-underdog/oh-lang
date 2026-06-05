@@ -1,0 +1,40 @@
+// Assertion-based Redis client test (exit 0 = all pass). Exercises every RESP reply
+// type against a live server: +OK, $bulk, $-1 nil, :int.
+#cmd(fd:6,buf:c,o,rr:c):v{sys(1,fd,&buf[0],o) sys(0,fd,&rr[0],256)}
+#main():3{
+fd:=connect_to(127,0,0,1,6379)
+?fd<0{\1}
+buf:[256]1=0
+rr:[256]1=0
+val:[64]1=0
+o:=resp_begin(buf,0,3)
+o=resp_arg(buf,o,"SET",3)
+o=resp_arg(buf,o,"k",1)
+o=resp_arg(buf,o,"hello",5)
+cmd(fd,buf,o,rr)
+?resp_isok(rr)!=1{\2}
+o=resp_begin(buf,0,2)
+o=resp_arg(buf,o,"GET",3)
+o=resp_arg(buf,o,"k",1)
+cmd(fd,buf,o,rr)
+?resp_bulk(rr,val)!=5{\3}
+?memcmp(val,"hello",5)!=0{\4}
+o=resp_begin(buf,0,2)
+o=resp_arg(buf,o,"GET",3)
+o=resp_arg(buf,o,"nope",4)
+cmd(fd,buf,o,rr)
+?resp_bulk(rr,val)!=0-1{\5}
+o=resp_begin(buf,0,2)
+o=resp_arg(buf,o,"INCR",4)
+o=resp_arg(buf,o,"ctr",3)
+cmd(fd,buf,o,rr)
+?resp_int(rr)!=1{\6}
+cmd(fd,buf,o,rr)
+?resp_int(rr)!=2{\7}
+o=resp_begin(buf,0,2)
+o=resp_arg(buf,o,"DEL",3)
+o=resp_arg(buf,o,"k",1)
+cmd(fd,buf,o,rr)
+?resp_int(rr)!=1{\8}
+sys(3,fd)
+0}

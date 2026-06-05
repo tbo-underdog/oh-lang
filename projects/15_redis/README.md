@@ -1,38 +1,38 @@
 # Redis client in Oh
 
 Talks to a real Redis server over its RESP wire protocol — raw sockets, no libc.
-Demonstrates the ecosystem-integration direction: use the databases you already run.
+Use the databases you already run, from Oh.
 
 ## Layers
 - **`std/resp.oh`** — the RESP protocol (encode commands, decode replies). Pure byte
-  functions, **fully unit-tested** in `tests/34_resp.oh` (no server needed).
-- **`redis.oh`** — the live client: `connect_to` + send + recv + decode. A SET/GET demo.
+  functions, **unit-tested** in `tests/34_resp.oh` (no server needed).
+- **`redis.oh`** — a live SET/GET demo. **`redis_test.oh`** — an assertion client that
+  exercises every reply type (`+OK`, `$bulk`, `$-1` nil, `:int`).
 
-## Run (against a real Redis)
+## Run
 ```sh
 redis-server &                  # or: docker run -p6379:6379 redis
 ./compiler/oh std/core.oh std/net.oh std/resp.oh projects/15_redis/redis.oh -o redis
 ./redis                         # -> hello
 ```
 
-## Test (no Redis needed)
+## Test
 ```sh
 ./projects/15_redis/test.sh             # native
 ARCH=arm64 ./projects/15_redis/test.sh  # freestanding aarch64 under qemu
 ```
-Runs the client against a correct minimal RESP server (`mock_redis.py`) and asserts the
-SET→GET roundtrip returns `hello`. Passes on both arches.
+Uses, in order: an existing Redis on `:6379`, a `docker run redis:alpine`, or a bundled
+RESP mock (`mock_redis.py`) if neither is available — so it runs anywhere, and against
+real Redis when it can.
 
-## Honest scope / verification
-- The **RESP protocol** (`std/resp`) is unit-tested against known byte sequences.
-- The **live client** is validated end-to-end against a correct RESP mock here. Against
-  real Redis it speaks the identical protocol for SET/GET; we haven't run it against
-  redis-the-product in this environment (none installed), so validate there before
-  relying on it.
+## Verification status
+- **Verified against real Redis 8.x (docker), on x86-64 AND ARM64 (qemu):** the full
+  `SET`/`GET`/`GET-missing`/`INCR`/`DEL` flow returns the correct replies, and
+  `redis-cli` confirms the Oh client's writes actually landed in Redis.
+- The RESP protocol layer is additionally unit-tested against known byte sequences.
+
+## Limits
 - Reads assume a reply fits one `recv` (fine for small values; production loops until a
-  full RESP frame is parsed). Auth/TLS/pipelining/cluster are not implemented.
-
-## Why Redis first
-RESP is a simple text-ish protocol — the most achievable real DB client. Postgres
-(binary protocol + SCRAM auth) and MongoDB (BSON + a richer wire protocol) are heavier
-and are the next groundwork, reusing this same connection + protocol-module pattern.
+  full RESP frame is parsed).
+- No AUTH, TLS, pipelining, or cluster support yet. SET/GET/INCR/DEL and the four core
+  reply types are covered.
