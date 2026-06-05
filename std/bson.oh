@@ -1,0 +1,79 @@
+// bson: minimal BSON encode/decode for the MongoDB wire protocol. Pure byte
+// functions, no I/O — unit-testable without a server. Little-endian.
+// Build a doc: w:=bson_begin(b,p); w=bson_i32/bson_str(...); ...; w=bson_end(b,p,w).
+// Read: bson_find(b, docOffset, "field") -> value offset (or -1).
+
+#w32(b:c,off,v):v{
+b[off]=(1)(v&255)
+b[off+1]=(1)((v>>8)&255)
+b[off+2]=(1)((v>>16)&255)
+b[off+3]=(1)((v>>24)&255)}
+#r32(b:c,off){
+((3)b[off]&255)+(((3)b[off+1]&255)<<8)+(((3)b[off+2]&255)<<16)+(((3)b[off+3]&255)<<24)}
+#cstr(b:c,off,s:c){
+i:=0
+~s[i]!=0{b[off+i]=s[i] i=i+1}
+b[off+i]=0
+off+i+1}
+#cstreq(b:c,off,t:c){
+i:=0
+~t[i]!=0{?b[off+i]!=t[i]{\0} i=i+1}
+?b[off+i]!=0{\0}
+1}
+
+// --- build ---
+#bson_begin(b:c,p)p+4
+#bson_end(b:c,p,w){
+b[w]=0
+w=w+1
+w32(b,p,w-p)
+w}
+#bson_elem(b:c,w,t,name:c){
+b[w]=(1)t
+w=w+1
+cstr(b,w,name)}
+#bson_i32(b:c,w,name:c,v){
+w=bson_elem(b,w,16,name)
+w32(b,w,v)
+w+4}
+#bson_str(b:c,w,name:c,s:c,sl){
+w=bson_elem(b,w,2,name)
+w32(b,w,sl+1)
+w=w+4
+@i,sl{b[w+i]=s[i]}
+w=w+sl
+b[w]=0
+w+1}
+
+// --- read ---
+#skipval(b:c,off,t){
+?t==1{\off+8}
+?t==2{\off+4+r32(b,off)}
+?t==3{\off+r32(b,off)}
+?t==4{\off+r32(b,off)}
+?t==8{\off+1}
+?t==16{\off+4}
+?t==18{\off+8}
+?t==7{\off+12}
+?t==10{\off}
+\off}
+// find a field by name in the doc at `doc`; returns offset of its VALUE, or -1
+#bson_find(b:c,doc,name:c){
+len:=r32(b,doc)
+i:=doc+4
+end:=doc+len-1
+~i<end{
+t:=(3)b[i]&255
+i=i+1
+ns:=i
+~b[i]!=0{i=i+1}
+i=i+1
+?cstreq(b,ns,name)==1{\i}
+i=skipval(b,i,t)
+}
+0-1}
+// read a string value (at the offset returned by bson_find for a 0x02 field) into out; returns length
+#bson_getstr(b:c,off,out:c){
+n:=r32(b,off)-1
+@i,n{out[i]=b[off+4+i]}
+n}
