@@ -1,0 +1,83 @@
+// Coroutine scheduler over epoll (edge-triggered). Handlers are PLAIN BLOCKING
+// functions — co_read/co_write suspend on EAGAIN and the scheduler resumes them
+// when the fd is ready. Minimum tokens (no hand state machine), C-class perf.
+// Needs std/core, std/mem, std/net. Define #conn_handler(c:*Conn) and pass its
+// address to co_init. Per-connection state is a heap Conn + its own stack.
+$Conn{ctx:6 fd:6 sched:6 alive:6}
+$Sched{ep:6 ctx:6 lfd:6 h:6 handler:6}
+// arm fd in epoll with an arbitrary token stored in the event data
+#epoll_arm(ep:6,fd:6,events,tok:6):6{
+ev:[16]1=0
+ev_set(ev,events,tok)
+sys(233,ep,1,fd,&ev[0])}
+// suspend the running coroutine back to the scheduler
+#co_yield(c:*Conn):v{
+s:=(*Sched)c.sched
+coswitch(&c.ctx,&s.ctx)}
+// blocking read: returns bytes (>0), 0 on EOF, <0 on error. Suspends on EAGAIN.
+#co_read(c:*Conn,buf:c,len:6):6{
+~1{
+r:=sys(0,c.fd,buf,len)
+?r>0{\r}
+?r==0{\0}
+?r!=0-11{\r}
+co_yield(c)
+}}
+// blocking write-all. Suspends on EAGAIN.
+#co_write(c:*Conn,buf:c,len:6):v{
+off:=(6)0
+~off<len{
+w:=sys(1,c.fd,&buf[off],len-off)
+?w>0{off=off+w}:{
+?w!=0-11{\}
+co_yield(c)
+}
+}}
+// close the connection and end this coroutine (never returns)
+#co_close(c:*Conn):v{
+s:=(*Sched)c.sched
+epoll_del(s.ep,c.fd)
+sys(3,c.fd)
+c.alive=0
+coswitch(&c.ctx,&s.ctx)}
+// accept all pending connections, spawn a coroutine per connection
+#co_accept(s:*Sched):v{
+cfd:=accept_nb(s.lfd)
+~cfd>=0{
+set_nonblock(cfd)
+ca:=halloc((*6)s.h,32)
+c:=(*Conn)ca
+c.fd=cfd
+c.sched=(6)s
+c.alive=1
+stk:=halloc((*6)s.h,65536)
+top:=stk+65536
+comake(&c.ctx,top,s.handler,ca)
+epoll_arm(s.ep,cfd,2147483653,ca)
+cfd=accept_nb(s.lfd)
+}}
+// init: heap addr, &handler, port. returns 0 or <0.
+#co_init(s:*Sched,h:6,handler:6,port):6{
+s.h=h
+s.handler=handler
+s.ep=epoll_new()
+?s.ep<0{\0-1}
+s.lfd=listen_on(port)
+?s.lfd<0{\0-2}
+epoll_arm(s.ep,s.lfd,1,0)
+0}
+// the event loop. listen events use token 0; connections use their Conn address.
+#co_run(s:*Sched):v{
+evs:[1024]1=0
+~1{
+n:=epoll_wait_n(s.ep,evs,64,-1)
+?n<0{\}
+i:=0
+~i<n{
+tok:=ev_fd(evs,i)
+?tok==0{co_accept(s)}:{
+c:=(*Conn)tok
+?c.alive==1{coswitch(&s.ctx,&c.ctx)}
+}
+i=i+1
+}}}

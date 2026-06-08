@@ -27,8 +27,29 @@ ARCH=arm64 ./projects/18_server/test.sh  # same under qemu (aarch64, freestandin
 50 simultaneous connections each echo their own payload correctly, clean shutdown, on
 **x86-64 AND aarch64 (qemu)** — on a real Linux kernel, no libc.
 
-## Next iteration
-`echo.oh` is a hand-written state machine. The planned compiler **async-transform**
-(stackless coroutines, whole-program-monomorphized scheduler) will let handlers be
-written blocking-style and compile to this same state machine — minimum tokens *and* ≥C.
-TLS and `SO_REUSEPORT` prefork are also pending.
+## Blocking-style handlers (coroutines) — `std/co.oh` + `echo_co.oh`
+Instead of a hand state machine, write the handler as a plain blocking function;
+`std/co.oh` (stackful coroutines + the same epoll loop) makes it non-blocking:
+```
+#conn_handler(c:*Conn){
+buf:[4096]1=0
+~1{
+n:=co_read(c,&buf[0],4096)   // suspends on EAGAIN; scheduler resumes on EPOLLIN
+?n<=0{co_close(c)}
+co_write(c,&buf[0],n)
+}}
+```
+`co_read`/`co_write`/`co_yield`/`co_close` suspend the coroutine on `EAGAIN`; the
+scheduler (`co_run`) resumes it when the fd is ready (edge-triggered). Each connection
+gets a heap `Conn` + its own stack; the coroutine's address is the epoll token.
+
+### Measured (x86-64): coroutine vs hand state machine
+- **Throughput: identical** — ~200k round-trips/sec each (syscall-bound; the context
+  switch is invisible), so ≥C holds.
+- **Tokens: −51%** — the blocking handler file is 153 vs 311 tokens.
+Verified 50/50 concurrent + a multi-message suspend/resume round-trip, x86-64 AND
+aarch64 (qemu).
+
+## Next
+`SO_REUSEPORT` prefork for multicore; per-connection arena reuse (the heap currently
+bump-allocates Conn+stack without reclaim); TLS.
