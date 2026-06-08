@@ -180,7 +180,11 @@ static FuncSig *lookup_func(char *name) {
 static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
     switch (e->kind) {
     case EX_INTLIT: {
-        Type *t = make_type(a, TY_I32);
+        /* Type by value: literals that don't fit in i32 are i64, so 64-bit
+         * constants (e.g. 0x8000000000000000) keep their bits instead of being
+         * truncated by an i32 type. */
+        TypeKind k = (e->ival < -2147483648LL || e->ival > 2147483647LL) ? TY_I64 : TY_I32;
+        Type *t = make_type(a, k);
         e->typ = t;
         return t;
     }

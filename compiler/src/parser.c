@@ -244,7 +244,10 @@ static Expr *parse_primary(Parser *p) {
     case TK_INTLIT: {
         advance(p); Expr *e=new_expr(p,EX_INTLIT);
         int base = (t.text[0]=='0' && (t.text[1]=='x'||t.text[1]=='X')) ? 16 : 10;
-        e->ival=(int64_t)strtoll(t.text,NULL,base); return e;
+        /* strtoull (not strtoll) so 64-bit literals with the high bit set (e.g.
+         * 0x8000000000000000) keep their bit pattern instead of clamping to
+         * LLONG_MAX; cast wraps to the two's-complement i64 value. */
+        e->ival=(int64_t)strtoull(t.text,NULL,base); return e;
     }
     case TK_FLOATLIT: {
         advance(p); Expr *e=new_expr(p,EX_FLOATLIT);
