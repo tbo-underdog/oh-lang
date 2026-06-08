@@ -1,0 +1,25 @@
+// Multicore echo: SO_REUSEPORT prefork over the coroutine scheduler. Shared-nothing
+// (each worker its own heap/epoll/socket). A "pid\n" request returns the serving
+// worker's PID, so a client can see connections spread across cores.
+#conn_handler(c:*Conn):v{
+buf:[4096]1=0
+~1{
+n:=co_read(c,&buf[0],4096)
+?n<=0{co_close(c)}
+?n>=3&&(3)buf[0]==112&&(3)buf[1]==105&&(3)buf[2]==100{
+pb:[24]1=0
+e:=itoa(pb,0,(3)getpid())
+pb[e]=(1)10
+co_write(c,&pb[0],e+1)
+}:{
+co_write(c,&buf[0],n)
+}
+}}
+#main(){
+prefork(4)
+hp:[3]6=0
+heap_new(&hp[0],16777216)
+s:Sched
+?co_init(&s,(6)(&hp[0]),(6)(&conn_handler),7000,128)<0{\1}
+co_run(&s)
+0}

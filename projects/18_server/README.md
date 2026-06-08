@@ -58,5 +58,13 @@ are dropped (backpressure). Verified: 5000 sequential connections survive (the
 pre-pool build aborted at 255 = 16 MB ÷ 64 KB), a 300-connection burst past `cap=128`
 serves cleanly with no crash, on x86-64 AND aarch64.
 
+### Multicore (`SO_REUSEPORT` prefork) — `echo_mc.oh`
+`prefork(n)` (in `std/net.oh`) forks `n` shared-nothing worker processes via
+`clone(SIGCHLD)`; each runs its own heap + epoll + `SO_REUSEPORT` listen socket, and
+the kernel load-balances accepts across them. No locks, no shared state, no atomics —
+the design the grill chose. `echo_mc.oh` answers a `pid` request with the serving
+worker's PID; a 200-connection probe is spread across all 4 workers (~50 each),
+verified x86-64 AND aarch64 (qemu). `./test_mc.sh`.
+
 ## Next
-`SO_REUSEPORT` prefork for multicore; TLS.
+TLS.

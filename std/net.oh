@@ -63,3 +63,16 @@ sys(233,ep,1,fd,&ev[0])}
 #epoll_del(ep:6,fd:6):6{sys(233,ep,2,fd,0)}
 // wait up to maxev events into evbuf (sized maxev*ev_size()); timeout ms (-1=block)
 #epoll_wait_n(ep:6,evbuf:c,maxev,timeout):6{sys(281,ep,&evbuf[0],maxev,timeout,0,0)}
+
+// ---- multicore: SO_REUSEPORT prefork (shared-nothing) ----
+#getpid():6{sys(39)}
+// Fork into `n` total worker processes. clone(SIGCHLD, stack=0) == fork: the child
+// COW-copies the parent's stack and returns here with pid 0. Each worker then runs
+// its own listen_on (SO_REUSEPORT) + event loop; the kernel load-balances accepts.
+#prefork(n):v{
+i:=1
+~i<n{
+pid:=sys(56,17,0,0,0,0)
+?pid==0{\}
+i=i+1
+}}

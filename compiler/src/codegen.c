@@ -44,10 +44,13 @@ static long remap_syscall_x86_to_arm64(long n) {
     case 43: return 202;  /* accept */
     case 44: return 206;  /* sendto */
     case 45: return 207;  /* recvfrom */
+    case 39: return 172;  /* getpid */
     case 49: return 200;  /* bind */
     case 50: return 201;  /* listen */
     case 54: return 208;  /* setsockopt */
+    case 56: return 220;  /* clone */
     case 60: return 93;   /* exit */
+    case 61: return 260;  /* wait4 */
     case 72: return 25;   /* fcntl */
     case 228: return 113; /* clock_gettime */
     case 233: return 21;  /* epoll_ctl */
