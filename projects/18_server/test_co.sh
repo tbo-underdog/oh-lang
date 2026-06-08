@@ -6,7 +6,7 @@
 set -u; cd "$(dirname "$0")/../.."
 OH=./compiler/oh; ARCH="${ARCH:-x86_64}"; BIN=/tmp/ohcoecho; PORT=7073
 SRC="std/core.oh std/mem.oh std/net.oh std/co.oh projects/18_server/echo_co.oh"
-sed "s/port:=7000/port:=$PORT/;s/,7000)/,$PORT)/" projects/18_server/echo_co.oh > /tmp/echo_co_t.oh
+sed "s/,7000,/,$PORT,/" projects/18_server/echo_co.oh > /tmp/echo_co_t.oh
 SRC="std/core.oh std/mem.oh std/net.oh std/co.oh /tmp/echo_co_t.oh"
 if [ "$ARCH" = arm64 ]; then
   $OH $SRC --target aarch64-linux --emit-ir -o $BIN >/dev/null 2>&1

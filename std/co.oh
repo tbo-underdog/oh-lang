@@ -2,9 +2,13 @@
 // functions — co_read/co_write suspend on EAGAIN and the scheduler resumes them
 // when the fd is ready. Minimum tokens (no hand state machine), C-class perf.
 // Needs std/core, std/mem, std/net. Define #conn_handler(c:*Conn) and pass its
-// address to co_init. Per-connection state is a heap Conn + its own stack.
-$Conn{ctx:6 fd:6 sched:6 alive:6}
-$Sched{ep:6 ctx:6 lfd:6 h:6 handler:6}
+// address to co_init.
+//
+// Memory is a fixed POOL of `cap` connection slots, each a preallocated Conn + its
+// own stack, recycled via a free-list. Bounded memory, no per-connection leak; when
+// the pool is full new connections are dropped (backpressure).
+$Conn{ctx:6 fd:6 sched:6 alive:6 slot:6}
+$Sched{ep:6 ctx:6 lfd:6 h:6 handler:6 cbase:6 sbase:6 ssz:6 cap:6 flist:6 ftop:6}
 // arm fd in epoll with an arbitrary token stored in the event data
 #epoll_arm(ep:6,fd:6,events,tok:6):6{
 ev:[16]1=0
@@ -33,33 +37,50 @@ w:=sys(1,c.fd,&buf[off],len-off)
 co_yield(c)
 }
 }}
-// close the connection and end this coroutine (never returns)
+// close the connection, return its slot to the pool, end this coroutine (no return)
 #co_close(c:*Conn):v{
 s:=(*Sched)c.sched
 epoll_del(s.ep,c.fd)
 sys(3,c.fd)
 c.alive=0
+fl:=(*6)s.flist
+fl[s.ftop]=c.slot
+s.ftop=s.ftop+1
 coswitch(&c.ctx,&s.ctx)}
-// accept all pending connections, spawn a coroutine per connection
+// accept all pending connections; reuse a pooled slot, or drop if the pool is full
 #co_accept(s:*Sched):v{
 cfd:=accept_nb(s.lfd)
 ~cfd>=0{
 set_nonblock(cfd)
-ca:=halloc((*6)s.h,32)
+?s.ftop<=0{sys(3,cfd)}:{
+s.ftop=s.ftop-1
+fl:=(*6)s.flist
+idx:=fl[s.ftop]
+ca:=s.cbase+idx*40
 c:=(*Conn)ca
 c.fd=cfd
 c.sched=(6)s
 c.alive=1
-stk:=halloc((*6)s.h,65536)
-top:=stk+65536
+c.slot=idx
+top:=s.sbase+(idx+1)*s.ssz
 comake(&c.ctx,top,s.handler,ca)
 epoll_arm(s.ep,cfd,2147483653,ca)
+}
 cfd=accept_nb(s.lfd)
 }}
-// init: heap addr, &handler, port. returns 0 or <0.
-#co_init(s:*Sched,h:6,handler:6,port):6{
+// init: heap addr, &handler, port, max concurrent connections (pool size). 0 or <0.
+#co_init(s:*Sched,h:6,handler:6,port,cap:6):6{
 s.h=h
 s.handler=handler
+s.cap=cap
+s.ssz=65536
+s.cbase=halloc((*6)h,cap*40)
+s.sbase=halloc((*6)h,cap*s.ssz)
+s.flist=halloc((*6)h,cap*8)
+fl:=(*6)s.flist
+i:=(6)0
+~i<cap{fl[i]=i i=i+1}
+s.ftop=cap
 s.ep=epoll_new()
 ?s.ep<0{\0-1}
 s.lfd=listen_on(port)

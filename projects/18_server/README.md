@@ -50,6 +50,13 @@ gets a heap `Conn` + its own stack; the coroutine's address is the epoll token.
 Verified 50/50 concurrent + a multi-message suspend/resume round-trip, x86-64 AND
 aarch64 (qemu).
 
+### Bounded memory (connection pool)
+`co_init(&s, heap, &handler, port, cap)` preallocates a pool of `cap` connection slots
+(each a `Conn` + its own stack) and recycles them via a free-list on `co_close`. Memory
+is bounded; there is **no per-connection leak**. When the pool is full, new connections
+are dropped (backpressure). Verified: 5000 sequential connections survive (the
+pre-pool build aborted at 255 = 16 MB ÷ 64 KB), a 300-connection burst past `cap=128`
+serves cleanly with no crash, on x86-64 AND aarch64.
+
 ## Next
-`SO_REUSEPORT` prefork for multicore; per-connection arena reuse (the heap currently
-bump-allocates Conn+stack without reclaim); TLS.
+`SO_REUSEPORT` prefork for multicore; TLS.

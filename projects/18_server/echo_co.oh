@@ -11,6 +11,6 @@ co_write(c,&buf[0],n)
 hp:[3]6=0
 heap_new(&hp[0],16777216)
 s:Sched
-?co_init(&s,(6)(&hp[0]),(6)(&conn_handler),7000)<0{\1}
+?co_init(&s,(6)(&hp[0]),(6)(&conn_handler),7000,128)<0{\1}
 co_run(&s)
 0}
