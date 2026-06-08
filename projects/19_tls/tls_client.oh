@@ -2,6 +2,11 @@
 // real server and exchanges application data. Certificate verification is NOT yet done
 // (INSECURE — next step). Needs std/core,net,x25519,sha256,hkdf,tls13,aes,gcm.
 #w16(b:c,o,v):v{b[o]=(1)((v>>8)&255) b[o+1]=(1)(v&255)}
+// pinned server key: returns 1 and fills p[0..32) when pinning is enabled, else 0.
+// Default: disabled (interop demo). test_pin.sh rewrites this body to enable it.
+#load_pin(p:c):6{
+// PIN_BODY
+0}
 #r16(b:c,o:6):6{(((3)b[o]&255)<<8)|((3)b[o+1]&255)}
 #r24(b:c,o:6):6{(((3)b[o]&255)<<16)|(((3)b[o+1]&255)<<8)|((3)b[o+2]&255)}
 #rd_fill(fd:6,buf:c,st:*6,need:6):v{
@@ -155,6 +160,13 @@ sigb:[64]1=0 @i,64{sigb[i]=fl[fo+8+i]}
 ?have_cert==0{sys(1,1,"NO CERT\n",8) \7}
 ?ed25519_verify(certpub,sm,o2,sigb)!=1{sys(1,1,"CERTIFICATE VERIFY FAILED\n",26) \8}
 sys(1,1,"certificate verified (ed25519)\n",31)
+// trust anchoring: if a key is pinned, the cert's key must match it (catches a
+// MITM presenting its own valid cert). Pinning is off unless load_pin returns 1.
+pin:[32]1=0
+?load_pin(pin)==1{
+?memcmp(certpub,pin,32)!=0{sys(1,1,"PIN MISMATCH - aborting\n",24) \11}
+sys(1,1,"pin matched\n",12)
+}
 }
 ?mt==20{sha256(tr,(3)trlen,thash_cv) done=1}
 @i,4+ml{tr[trlen+i]=fl[fo+i]}
