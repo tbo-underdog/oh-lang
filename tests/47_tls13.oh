@@ -1,0 +1,34 @@
+// TLS 1.3 key schedule (RFC 8446 §7.1) — fixed constants + full handshake secrets.
+#tohex(b:c,n,out:c):v{
+hd:="0123456789abcdef"
+@i,n{out[i*2]=hd[((3)b[i]>>4)&15] out[i*2+1]=hd[(3)b[i]&15]}}
+#main():3{
+z:[32]1=0
+hx:[80]1=0
+early:[32]1=0
+hkdf_extract(z,32,z,32,early)
+tohex(early,32,hx)
+?memcmp(hx,"33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a",64)!=0{\1}
+derived:[32]1=0
+tls_derive_secret(early,"derived",7,z,0,derived)
+tohex(derived,32,hx)
+?memcmp(hx,"6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba",64)!=0{\2}
+shared:[32]1=0 @i,32{shared[i]=(1)i}
+hsh:[32]1=0 @i,32{hsh[i]=(1)((i*5+1)&255)}
+hs:[32]1=0 cs:[32]1=0 ss:[32]1=0
+tls_handshake_secrets(shared,hsh,hs,cs,ss)
+tohex(hs,32,hx)
+?memcmp(hx,"ddbe37614d014a8c19db0a47955ee6930b3ee727c408386ba274344962b0e015",64)!=0{\3}
+tohex(cs,32,hx)
+?memcmp(hx,"a0b1445647b1f87cf6a493db885a38f2b44f9e5dcc9f68c71a2c6475656f7922",64)!=0{\4}
+tohex(ss,32,hx)
+?memcmp(hx,"7759c1b0567e69925c480add8f9be68d2764bb34d90cebfd88e103ee97b2e6cc",64)!=0{\5}
+key:[16]1=0 iv:[12]1=0
+@i,32{key[0]=key[0]}
+ck:[32]1=0 @i,32{ck[i]=cs[i]}
+tls_traffic_keyiv(ck,key,iv)
+tohex(key,16,hx)
+?memcmp(hx,"782273e3d151e3e6ad8197ef77f1ea5b",32)!=0{\6}
+tohex(iv,12,hx)
+?memcmp(hx,"aeede6092398d8c49b6f6c2b",24)!=0{\7}
+0}
