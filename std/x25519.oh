@@ -1,0 +1,147 @@
+// X25519 (RFC 7748) — ECDHE on Curve25519. Field elements are 10 i64 limbs in
+// radix 2^25.5 (donna scheme; no i128 needed). Needs std/core. Verified vs RFC 7748.
+// All limbs are i64 throughout (arithmetic >> on signed limbs is intentional).
+
+// carry/reduce a 10-limb element in place (two passes + 2^255->19 wrap)
+#fcarry(o:*6):v{
+r:=0
+~r<2{
+c:=(6)0
+@i,10{
+o[i]=o[i]+c
+?(i&1)==0{c=o[i]>>26 o[i]=o[i]&67108863}:{c=o[i]>>25 o[i]=o[i]&33554431}
+}
+o[0]=o[0]+19*c
+r=r+1
+}}
+// out = a*b  (out may alias a or b: out is written only at the end)
+#fmul(out:*6,a:*6,b:*6):v{
+t:[19]6=0
+@i,10{@j,10{
+f:=(6)1
+?(i&1)==1&&(j&1)==1{f=2}
+t[i+j]=t[i+j]+f*a[i]*b[j]
+}}
+@i,9{t[i]=t[i]+19*t[i+10]}
+fcarry(t)
+@i,10{out[i]=t[i]}}
+#fsum(out:*6,a:*6,b:*6):v{@i,10{out[i]=a[i]+b[i]}}
+#fsub(out:*6,a:*6,b:*6):v{@i,10{out[i]=a[i]-b[i]}}
+#fscal(out:*6,a:*6):v{@i,10{out[i]=a[i]*121665} fcarry(out)}
+// read n bits (n<=26) starting at LE bit `start` from byte buffer b
+#getbits(b:c,start,n):6{
+v:=(6)0
+k:=0
+~k<n{
+bit:=start+k
+by:=(6)b[bit/8]&255
+v=v|(((by>>(bit%8))&1)<<k)
+k=k+1
+}
+v}
+// unpack 32 little-endian bytes (bits 0..254) into 10 limbs
+#fexpand(out:*6,b:c):v{
+sh:=0
+@i,10{
+bits:=26
+?(i&1)==1{bits=25}
+out[i]=getbits(b,sh,bits)
+sh=sh+bits
+}}
+// inverse: out = z^(p-2) mod p, Fermat. e=p-2 bits hardcoded via the value test.
+// p-2 = 2^255 - 21. We test bit i of (p-2) without storing it: bits 255..5 are 1,
+// bit pattern of 21 = 0b10101 means bits 0,2,4 of -21... compute via a 32-byte const.
+#finv(out:*6,z:*6):v{
+// e = p-2 as 32 LE bytes
+e:[32]1=0
+@i,32{e[i]=(1)255}
+e[0]=(1)0xeb
+e[31]=(1)0x7f
+r:[10]6=0
+r[0]=1
+i:=254
+~i>=0{
+fmul(r,r,r)
+?((((3)e[i/8]&255)>>(i%8))&1)==1{fmul(r,r,z)}
+i=i-1
+}
+@k,10{out[k]=r[k]}}
+// pack 10 carried limbs into 255 bits -> 32 LE bytes (raw, may be >= p)
+#fpack(out:c,in:*6):v{
+@k,32{out[k]=(1)0}
+pos:=0
+@i,10{
+bits:=26
+?(i&1)==1{bits=25}
+bj:=0
+~bj<bits{
+gp:=pos+bj
+bit:=(3)((in[i]>>bj)&1)
+out[gp/8]=(1)(((3)out[gp/8]&255)|(bit<<(gp%8)))
+bj=bj+1
+}
+pos=pos+bits
+}}
+// if b (32 LE bytes) >= p, subtract p in place. p = 2^255-19.
+#freeze(b:c):v{
+t:[32]1=0
+borrow:=0
+@i,32{
+pb:=255
+?i==0{pb=0xed}
+?i==31{pb=0x7f}
+d:=((3)b[i]&255)-pb-borrow
+?d<0{d=d+256 borrow=1}:{borrow=0}
+t[i]=(1)d
+}
+?borrow==0{@i,32{b[i]=t[i]}}}
+// out (32 bytes) = canonical contraction of a field element
+#fcontract(out:c,in:*6):v{
+o:[10]6=0
+@i,10{o[i]=in[i]}
+fcarry(o) fcarry(o) fcarry(o)
+fpack(out,o)
+freeze(out)
+freeze(out)}
+// conditional swap of two field elements when swap==1
+#cswap(swap,a:*6,b:*6):v{
+m:=(6)(0-swap)
+@i,10{
+x:=m&(a[i]^b[i])
+a[i]=a[i]^x
+b[i]=b[i]^x
+}}
+// X25519: out32 = scalar32 * point32 (Montgomery ladder)
+#x25519(out:c,scalar:c,point:c):v{
+k:[32]1=0
+@i,32{k[i]=scalar[i]}
+k[0]=(1)((3)k[0]&248)
+k[31]=(1)(((3)k[31]&127)|64)
+x1:[10]6=0 fexpand(x1,point)
+x2:[10]6=0 x2[0]=1
+z2:[10]6=0
+x3:[10]6=0 @i,10{x3[i]=x1[i]}
+z3:[10]6=0 z3[0]=1
+a:[10]6=0 aa:[10]6=0 b:[10]6=0 bb:[10]6=0 e:[10]6=0
+c:[10]6=0 d:[10]6=0 da:[10]6=0 cb:[10]6=0 t0:[10]6=0 t1:[10]6=0
+swap:=0
+t:=254
+~t>=0{
+kt:=(((3)k[t/8]&255)>>(t%8))&1
+swap=swap^kt
+cswap(swap,x2,x3)
+cswap(swap,z2,z3)
+swap=kt
+fsum(a,x2,z2) fmul(aa,a,a) fsub(b,x2,z2) fmul(bb,b,b) fsub(e,aa,bb)
+fsum(c,x3,z3) fsub(d,x3,z3) fmul(da,d,a) fmul(cb,c,b)
+fsum(t0,da,cb) fmul(x3,t0,t0)
+fsub(t1,da,cb) fmul(t1,t1,t1) fmul(z3,x1,t1)
+fmul(x2,aa,bb)
+fscal(t0,e) fsum(t0,aa,t0) fmul(z2,e,t0)
+t=t-1
+}
+cswap(swap,x2,x3)
+cswap(swap,z2,z3)
+zi:[10]6=0 finv(zi,z2)
+fmul(x2,x2,zi)
+fcontract(out,x2)}

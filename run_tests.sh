@@ -99,6 +99,7 @@ run 42_coroutine  0  std/core.oh tests/42_coroutine.oh
 run 43_hkdf       0  std/core.oh std/sha256.oh std/hkdf.oh tests/43_hkdf.oh
 run 44_aes        0  std/core.oh std/aes.oh tests/44_aes.oh
 run 45_gcm        0  std/core.oh std/aes.oh std/gcm.oh tests/45_gcm.oh
+run 46_x25519     0  std/core.oh std/x25519.oh tests/46_x25519.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh
