@@ -1,0 +1,19 @@
+// HTTPS GET via the reusable std/tls.oh. Connects 127.0.0.1:4433.
+#main(){
+fd:=connect_to(127,0,0,1,4433)
+?fd<0{\1}
+sbx:[256]1=0 crk:[240]1=0 civ:[12]1=0 srk:[240]1=0 siv:[12]1=0 rbuf:[32768]1=0
+t:Tls
+t.fd=fd
+t.sbx=(6)(&sbx[0]) t.crk=(6)(&crk[0]) t.civ=(6)(&civ[0])
+t.srk=(6)(&srk[0]) t.siv=(6)(&siv[0]) t.rbuf=(6)(&rbuf[0])
+?tls_handshake(&t)!=0{sys(1,1,"HANDSHAKE FAIL\n",15) \2}
+sys(1,1,"handshake ok\n",13)
+req:[64]1=0 rq:=bcopy(req,0,"GET / HTTP/1.0\r\n\r\n")
+tls_send(&t,req,rq)
+out:[16384]1=0
+n:=tls_recv(&t,out)
+?n<0{\3}
+sys(1,1,"GOT: ",5) sys(1,1,&out[0],n) sys(1,1,"\n",1)
+sys(3,fd)
+0}

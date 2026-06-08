@@ -1,0 +1,234 @@
+// Reusable TLS 1.3 client (x25519 + AES-128-GCM + SHA-256) with Ed25519
+// CertificateVerify + optional pinning. Needs std/core, std/net, std/x25519,
+// std/sha256, std/sha512, std/hkdf, std/tls13, std/aes, std/gcm, std/ed25519.
+//
+// Caller allocates the backing buffers and a Tls, sets t.fd (connected socket) and the
+// pointer fields, then: tls_handshake(t) -> tls_send(t,data,len) / tls_recv(t,out).
+// Pointer fields (as i64 addresses): sbx[256], crk[240], civ[12], srk[240], siv[12],
+// rbuf[32768].
+$Tls{fd:6 cseq:6 sseq:6 cnr:6 snr:6 rn:6 rpos:6 sbx:6 crk:6 civ:6 srk:6 siv:6 rbuf:6}
+#tw16(b:c,o,v):v{b[o]=(1)((v>>8)&255) b[o+1]=(1)(v&255)}
+#tr16(b:c,o:6):6{(((3)b[o]&255)<<8)|((3)b[o+1]&255)}
+#tr24(b:c,o:6):6{(((3)b[o]&255)<<16)|(((3)b[o+1]&255)<<8)|((3)b[o+2]&255)}
+#tfill(fd:6,buf:c,st:*6,need:6):v{
+~st[0]<need{
+r:=sys(0,fd,&buf[st[0]],32768-st[0])
+?r<=0{\}
+st[0]=st[0]+r
+}}
+#tnonce(out:c,iv:c,seq:6):v{
+@i,12{out[i]=iv[i]}
+@i,8{out[11-i]=(1)((3)out[11-i]^((seq>>(i*8))&255))}}
+// pinned server key: returns 1 and fills p[0..32) if pinning is on, else 0 (off).
+#load_pin(p:c):6{
+// PIN_BODY
+0}
+// low-level: AEAD-encrypt dlen bytes with inner content-type ctype, send as a record.
+#trec(fd:6,rk:c,nr:6,sb:c,iv:c,seq:6,ctype,data:c,dlen):v{
+inner:[16400]1=0
+@i,dlen{inner[i]=data[i]}
+inner[dlen]=(1)ctype
+ilen:=dlen+1
+nonce:[12]1=0 tnonce(nonce,iv,seq)
+rec:[16500]1=0
+rec[0]=(1)23 rec[1]=(1)3 rec[2]=(1)3 tw16(rec,3,ilen+16)
+aad:[5]1=0 @i,5{aad[i]=rec[i]}
+ct:[16400]1=0 tag:[16]1=0
+aes_gcm_encrypt(rk,nr,sb,nonce,aad,5,inner,ilen,ct,tag)
+@i,ilen{rec[5+i]=ct[i]}
+@i,16{rec[5+ilen+i]=tag[i]}
+sys(1,fd,&rec[0],5+ilen+16)}
+// Full TLS 1.3 handshake on t.fd. Fills t app keys/ivs/sbox and leaves the record
+// reader (t.rbuf,t.rn,t.rpos) positioned after the server flight. Returns 0, or <0.
+#tls_handshake(t:*Tls):6{
+fd:=t.fd
+sb:=(*1)t.sbx
+aes_sbox(sb)
+rb:=(*1)t.rbuf
+priv:[32]1=0 rand_bytes(priv,32)
+basep:[32]1=0 basep[0]=(1)9
+pub:[32]1=0 x25519(pub,priv,basep)
+hb:[512]1=0
+o:=0
+hb[o]=(1)3 hb[o+1]=(1)3 o=o+2
+crand:[32]1=0 rand_bytes(crand,32)
+@i,32{hb[o+i]=crand[i]} o=o+32
+hb[o]=(1)32 o=o+1
+sid:[32]1=0 rand_bytes(sid,32)
+@i,32{hb[o+i]=sid[i]} o=o+32
+tw16(hb,o,2) o=o+2 hb[o]=(1)0x13 hb[o+1]=(1)0x01 o=o+2
+hb[o]=(1)1 o=o+1 hb[o]=(1)0 o=o+1
+extlenpos:=o o=o+2
+tw16(hb,o,0x2b) o=o+2 tw16(hb,o,3) o=o+2 hb[o]=(1)2 o=o+1 tw16(hb,o,0x0304) o=o+2
+tw16(hb,o,0x0a) o=o+2 tw16(hb,o,4) o=o+2 tw16(hb,o,2) o=o+2 tw16(hb,o,0x1d) o=o+2
+tw16(hb,o,0x0d) o=o+2 tw16(hb,o,8) o=o+2 tw16(hb,o,6) o=o+2
+tw16(hb,o,0x0807) o=o+2 tw16(hb,o,0x0403) o=o+2 tw16(hb,o,0x0804) o=o+2
+tw16(hb,o,0x33) o=o+2 tw16(hb,o,38) o=o+2 tw16(hb,o,36) o=o+2 tw16(hb,o,0x1d) o=o+2 tw16(hb,o,32) o=o+2
+@i,32{hb[o+i]=pub[i]} o=o+32
+tw16(hb,extlenpos,o-extlenpos-2)
+bodylen:=o
+tr:[16384]1=0
+trlen:=(6)0
+tr[0]=(1)1 tr[1]=(1)0 tr[2]=(1)((bodylen>>8)&255) tr[3]=(1)(bodylen&255)
+@i,bodylen{tr[4+i]=hb[i]}
+trlen=(6)(4+bodylen)
+rec:[700]1=0
+rec[0]=(1)22 rec[1]=(1)3 rec[2]=(1)1 tw16(rec,3,(3)trlen)
+@i,trlen{rec[5+i]=tr[i]}
+sys(1,fd,&rec[0],5+trlen)
+st:[2]6=0
+pos:=(6)0
+tfill(fd,rb,st,pos+5)
+?((3)rb[pos]&255)!=22{\0-2}
+shlen:=tr16(rb,pos+3)
+tfill(fd,rb,st,pos+5+shlen)
+shoff:=pos+5
+@i,shlen{tr[trlen+i]=rb[shoff+i]}
+trlen=trlen+shlen
+p:=shoff+4
+p=p+2+32
+slen:=(6)((3)rb[p]&255) p=p+1+slen
+p=p+2+1
+extslen:=tr16(rb,p) p=p+2
+exend:=p+extslen
+spub:[32]1=0 found:=0
+~p<exend{
+et:=tr16(rb,p)
+el:=tr16(rb,p+2)
+?et==0x33{@i,32{spub[i]=rb[p+8+i]} found=1}
+p=p+4+el
+}
+?found==0{\0-3}
+shared:[32]1=0 x25519(shared,priv,spub)
+thash:[32]1=0 sha256(tr,(3)trlen,thash)
+hs:[32]1=0 cs:[32]1=0 ss:[32]1=0
+tls_handshake_secrets(shared,thash,hs,cs,ss)
+skey:[16]1=0 hsiv:[12]1=0 tls_traffic_keyiv(ss,skey,hsiv)
+ckey:[16]1=0 hciv:[12]1=0 tls_traffic_keyiv(cs,ckey,hciv)
+hsrk:[240]1=0 snr:=aes_expand(skey,16,sb,hsrk)
+hcrk:[240]1=0 cnr:=aes_expand(ckey,16,sb,hcrk)
+pos=pos+5+shlen
+fl:[16384]1=0
+fllen:=(6)0
+fo:=(6)0
+sseq:=(6)0
+done:=0
+thash_cv:[32]1=0
+thash_cert:[32]1=0
+certpub:[32]1=0
+have_cert:=0
+~done==0{
+tfill(fd,rb,st,pos+5)
+rt:=(3)rb[pos]&255
+rl:=tr16(rb,pos+3)
+tfill(fd,rb,st,pos+5+rl)
+?rt==23{
+nonce:[12]1=0 tnonce(nonce,hsiv,sseq)
+aad:[5]1=0 @i,5{aad[i]=rb[pos+i]}
+ctlen:=rl-16
+ct:[16384]1=0 @i,ctlen{ct[i]=rb[pos+5+i]}
+tag:[16]1=0 @i,16{tag[i]=rb[pos+5+ctlen+i]}
+ptn:[16384]1=0
+?aes_gcm_decrypt(hsrk,snr,sb,nonce,aad,5,ct,(3)ctlen,tag,ptn)!=1{\0-4}
+sseq=sseq+1
+j:=ctlen-1
+~j>=0&&(3)ptn[j]==0{j=j-1}
+@i,j{fl[fllen+i]=ptn[i]}
+fllen=fllen+j
+~fo+4<=fllen{
+mt:=(3)fl[fo]&255
+ml:=tr24(fl,fo+1)
+?fo+4+ml<=fllen{
+?mt==11{
+q:=fo+4
+~q+6<fo+4+ml{
+?(3)fl[q]==0x2b&&(3)fl[q+1]==0x65&&(3)fl[q+2]==0x70&&(3)fl[q+3]==0x03&&(3)fl[q+4]==0x21&&(3)fl[q+5]==0x00{
+@i,32{certpub[i]=fl[q+6+i]}
+have_cert=1
+q=fo+4+ml
+}
+q=q+1
+}
+}
+?mt==15{
+sha256(tr,(3)trlen,thash_cert)
+sm:[200]1=0
+@i,64{sm[i]=(1)0x20}
+o2:=bcopy(sm,64,"TLS 1.3, server CertificateVerify")
+sm[o2]=(1)0 o2=o2+1
+@i,32{sm[o2+i]=thash_cert[i]} o2=o2+32
+sigb:[64]1=0 @i,64{sigb[i]=fl[fo+8+i]}
+?have_cert==0{\0-7}
+?ed25519_verify(certpub,sm,o2,sigb)!=1{\0-8}
+pin:[32]1=0
+?load_pin(pin)==1{
+?memcmp(certpub,pin,32)!=0{\0-11}
+}
+}
+?mt==20{sha256(tr,(3)trlen,thash_cv) done=1}
+@i,4+ml{tr[trlen+i]=fl[fo+i]}
+trlen=trlen+4+ml
+fo=fo+4+ml
+}
+?fo+4+ml>fllen{fo=fo}
+?done==1{fo=fllen}
+}
+}
+pos=pos+5+rl
+}
+fkey:[32]1=0 tls_expand_label(ss,"finished",8,hsiv,0,32,fkey)
+exp:[32]1=0 hmac(fkey,32,thash_cv,32,exp)
+sfin:[32]1=0 @i,32{sfin[i]=tr[trlen-32+i]}
+?memcmp(exp,sfin,32)!=0{\0-5}
+thash_sf:[32]1=0 sha256(tr,(3)trlen,thash_sf)
+cfkey:[32]1=0 tls_expand_label(cs,"finished",8,hciv,0,32,cfkey)
+cvd:[32]1=0 hmac(cfkey,32,thash_sf,32,cvd)
+cfin:[40]1=0 cfin[0]=(1)20 cfin[1]=(1)0 cfin[2]=(1)0 cfin[3]=(1)32
+@i,32{cfin[4+i]=cvd[i]}
+trec(fd,hcrk,cnr,sb,hciv,0,22,cfin,36)
+// application traffic keys -> store in t
+z:[32]1=0
+derived2:[32]1=0 tls_derive_secret(hs,"derived",7,z,0,derived2)
+master:[32]1=0 hkdf_extract(derived2,32,z,32,master)
+cap:[32]1=0 sap:[32]1=0
+tls_expand_label(master,"c ap traffic",12,thash_sf,32,32,cap)
+tls_expand_label(master,"s ap traffic",12,thash_sf,32,32,sap)
+cak:[16]1=0 sak:[16]1=0
+tls_traffic_keyiv(cap,cak,(*1)t.civ)
+tls_traffic_keyiv(sap,sak,(*1)t.siv)
+t.cnr=aes_expand(cak,16,sb,(*1)t.crk)
+t.snr=aes_expand(sak,16,sb,(*1)t.srk)
+t.cseq=0 t.sseq=0
+t.rn=st[0] t.rpos=pos
+0}
+// send application data
+#tls_send(t:*Tls,data:c,dlen):v{
+trec(t.fd,(*1)t.crk,t.cnr,(*1)t.sbx,(*1)t.civ,t.cseq,23,data,dlen)
+t.cseq=t.cseq+1}
+// receive the next application-data record into out; returns length (>=0), -1 on EOF/err.
+// Post-handshake non-application records (tickets/alerts) are skipped.
+#tls_recv(t:*Tls,out:c):6{
+rb:=(*1)t.rbuf
+sb:=(*1)t.sbx
+srk:=(*1)t.srk
+siv:=(*1)t.siv
+st:[2]6=0 st[0]=t.rn
+~1{
+tfill(t.fd,rb,st,t.rpos+5)
+?st[0]<t.rpos+5{t.rn=st[0] \0-1}
+rl:=tr16(rb,t.rpos+3)
+tfill(t.fd,rb,st,t.rpos+5+rl)
+nonce:[12]1=0 tnonce(nonce,siv,t.sseq)
+aad:[5]1=0 @i,5{aad[i]=rb[t.rpos+i]}
+cl:=rl-16
+ct:[16384]1=0 @i,cl{ct[i]=rb[t.rpos+5+i]}
+tag:[16]1=0 @i,16{tag[i]=rb[t.rpos+5+cl+i]}
+ptn:[16384]1=0
+?aes_gcm_decrypt(srk,t.snr,sb,nonce,aad,5,ct,(3)cl,tag,ptn)!=1{t.rn=st[0] \0-1}
+t.sseq=t.sseq+1
+t.rpos=t.rpos+5+rl
+j:=cl-1
+~j>=0&&(3)ptn[j]==0{j=j-1}
+ct2:=(3)ptn[j]&255
+?ct2==23{@i,j{out[i]=ptn[i]} t.rn=st[0] \j}
+}}
