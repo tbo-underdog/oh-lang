@@ -2,10 +2,12 @@
 // radix 2^25.5 (donna scheme; no i128 needed). Needs std/core. Verified vs RFC 7748.
 // All limbs are i64 throughout (arithmetic >> on signed limbs is intentional).
 
-// carry/reduce a 10-limb element in place (two passes + 2^255->19 wrap)
+// carry/reduce a 10-limb element in place (passes + 2^255->19 wrap). Three passes
+// fully canonicalize limbs (<2^26/2^25), so chained fsum->fmul (ed25519) can't grow
+// limbs enough to overflow the i64 fmul accumulator.
 #fcarry(o:*6):v{
 r:=0
-~r<2{
+~r<3{
 c:=(6)0
 @i,10{
 o[i]=o[i]+c

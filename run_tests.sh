@@ -102,6 +102,7 @@ run 45_gcm        0  std/core.oh std/aes.oh std/gcm.oh tests/45_gcm.oh
 run 46_x25519     0  std/core.oh std/x25519.oh tests/46_x25519.oh
 run 47_tls13      0  std/core.oh std/sha256.oh std/hkdf.oh std/tls13.oh tests/47_tls13.oh
 run 48_sha512     0  std/core.oh std/sha512.oh tests/48_sha512.oh
+run 49_ed25519    0  std/core.oh std/x25519.oh std/sha512.oh std/ed25519.oh tests/49_ed25519.oh
 
 echo "== freestanding (zero-dependency, -nostdlib + rt) =="
 run_fs 15_freestanding 0 std/mem.oh std/map.oh tests/15_freestanding.oh
