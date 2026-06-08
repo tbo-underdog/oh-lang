@@ -1,0 +1,29 @@
+// HKDF-SHA256 (RFC 5869): extract-then-expand key derivation. Needs std/core,
+// std/sha256. Used by the TLS 1.3 key schedule.
+
+// HKDF-Extract(salt, IKM) = HMAC-SHA256(salt, IKM) -> PRK (32 bytes) in prk.
+#hkdf_extract(salt:c,saltlen,ikm:c,ikmlen,prk:c):v{hmac(salt,saltlen,ikm,ikmlen,prk)}
+
+// HKDF-Expand(PRK, info, L) -> L bytes in out. T(i)=HMAC(PRK, T(i-1)|info|i).
+#hkdf_expand(prk:c,info:c,infolen,l,out:c):v{
+t:[32]1=0
+tlen:=0
+n:=0
+ctr:=1
+~n<l{
+m:[512]1=0
+mo:=0
+@i,tlen{m[mo+i]=t[i]}
+mo=mo+tlen
+@i,infolen{m[mo+i]=info[i]}
+mo=mo+infolen
+m[mo]=(1)ctr
+mo=mo+1
+hmac(prk,32,m,mo,t)
+tlen=32
+take:=32
+?l-n<32{take=l-n}
+@i,take{out[n+i]=t[i]}
+n=n+take
+ctr=ctr+1
+}}

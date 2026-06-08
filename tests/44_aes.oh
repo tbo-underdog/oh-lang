@@ -1,0 +1,31 @@
+// AES-128 & AES-256 block encryption — FIPS-197 vectors.
+#tohex(b:c,n,out:c):v{
+hd:="0123456789abcdef"
+@i,n{out[i*2]=hd[((3)b[i]>>4)&15] out[i*2+1]=hd[(3)b[i]&15]}}
+#main():3{
+sb:[256]1=0
+aes_sbox(sb)
+pt:[16]1=0
+pt[0]=(1)0x00 pt[1]=(1)0x11 pt[2]=(1)0x22 pt[3]=(1)0x33
+pt[4]=(1)0x44 pt[5]=(1)0x55 pt[6]=(1)0x66 pt[7]=(1)0x77
+pt[8]=(1)0x88 pt[9]=(1)0x99 pt[10]=(1)0xaa pt[11]=(1)0xbb
+pt[12]=(1)0xcc pt[13]=(1)0xdd pt[14]=(1)0xee pt[15]=(1)0xff
+hx:[64]1=0
+ct:[16]1=0
+// AES-128: key = 00..0f
+k16:[16]1=0 @i,16{k16[i]=(1)i}
+rk:[240]1=0
+nr:=aes_expand(k16,16,sb,rk)
+?nr!=10{\1}
+aes_encrypt(rk,nr,sb,pt,ct)
+tohex(ct,16,hx)
+?memcmp(hx,"69c4e0d86a7b0430d8cdb78070b4c55a",32)!=0{\2}
+// AES-256: key = 00..1f
+k32:[32]1=0 @i,32{k32[i]=(1)i}
+rk2:[240]1=0
+nr=aes_expand(k32,32,sb,rk2)
+?nr!=14{\3}
+aes_encrypt(rk2,nr,sb,pt,ct)
+tohex(ct,16,hx)
+?memcmp(hx,"8ea2b7ca516745bfeafc49904b496089",32)!=0{\4}
+0}

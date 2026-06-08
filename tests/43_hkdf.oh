@@ -1,0 +1,19 @@
+// HKDF-SHA256 extract+expand — RFC 5869 Test Case 1.
+#tohex(b:c,n,out:c):v{
+hd:="0123456789abcdef"
+@i,n{out[i*2]=hd[((3)b[i]>>4)&15] out[i*2+1]=hd[(3)b[i]&15]}}
+#main():3{
+// RFC 5869 Test Case 1 (SHA-256)
+ikm:[22]1=0 @i,22{ikm[i]=(1)0x0b}
+salt:[13]1=0 @i,13{salt[i]=(1)i}
+info:[10]1=0 @i,10{info[i]=(1)(0xf0+i)}
+prk:[32]1=0
+hkdf_extract(salt,13,ikm,22,prk)
+hx:[100]1=0
+tohex(prk,32,hx)
+?memcmp(hx,"077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",64)!=0{\1}
+okm:[42]1=0
+hkdf_expand(prk,info,10,42,okm)
+tohex(okm,42,hx)
+?memcmp(hx,"3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",84)!=0{\2}
+0}
