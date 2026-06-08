@@ -194,13 +194,14 @@ static void collect_strings_stmts(Stmt **body, size_t n) {
  * vsum/dot are lowered to module-level helper functions (so their loop lives in
  * its own entry block — mem2reg-promotable and clang-vectorizable — regardless
  * of the call site's context). Scan the program to know which to emit. */
-static int g_uses_vsum = 0, g_uses_dot = 0;
+static int g_uses_vsum = 0, g_uses_dot = 0, g_uses_co = 0;
 static void scan_simd_expr(Expr *e) {
     if (!e) return;
     switch (e->kind) {
     case EX_CALL:
         if (strcmp(e->call.name,"vsum")==0) g_uses_vsum = 1;
         else if (strcmp(e->call.name,"dot")==0) g_uses_dot = 1;
+        else if (strcmp(e->call.name,"coswitch")==0||strcmp(e->call.name,"comake")==0) g_uses_co = 1;
         for (size_t i=0;i<e->call.argc;i++) scan_simd_expr(e->call.args[i]);
         break;
     case EX_BINOP:   scan_simd_expr(e->binop.lhs); scan_simd_expr(e->binop.rhs); break;
@@ -1033,7 +1034,13 @@ static int emit_expr(Expr *e) {
             Expr *op = e->unop.operand;
             if (op->kind == EX_IDENT) {
                 int idx = vars_lookup(op->ident);
-                assert(idx >= 0 && "unknown variable in address-of");
+                if (idx < 0) {
+                    /* &func — address of a function (code pointer). */
+                    int r = new_reg();
+                    fprintf(out, "  %%t%d = getelementptr i8, ptr @%s, i64 0\n",
+                            r, op->ident);
+                    return r;
+                }
                 int r = new_reg();
                 fprintf(out, "  %%t%d = getelementptr i8, ptr %%v%d, i32 0\n",
                         r, var_slots[idx].reg);
@@ -1203,6 +1210,25 @@ static int emit_expr(Expr *e) {
         /* archid() → compile-time arch constant (0=x86_64, 1=aarch64). */
         if (strcmp(e->call.name,"archid")==0) {
             return new_iconst(target_is_aarch64() ? 1 : 0);
+        }
+        /* coroutine primitives → call into the module-asm context-switch routines.
+         * All args coerced to i64 (addresses). Return void. */
+        if (strcmp(e->call.name,"coswitch")==0 || strcmp(e->call.name,"comake")==0) {
+            size_t n = e->call.argc;
+            int wide[4];
+            for (size_t i=0;i<n && i<4;i++) {
+                TypeKind ak = e->call.args[i]->typ->kind;
+                int w = new_reg();
+                if (ak==TY_PTR||ak==TY_ARRAY) { fprintf(out,"  %%t%d = ptrtoint ptr ",w); emit_ref(arg_regs[i]); fprintf(out," to i64\n"); }
+                else if (ak==TY_I64||ak==TY_U64) { fprintf(out,"  %%t%d = add i64 ",w); emit_ref(arg_regs[i]); fprintf(out,", 0\n"); }
+                else { fprintf(out,"  %%t%d = sext %s ",w,llvm_scalar(ak)); emit_ref(arg_regs[i]); fprintf(out," to i64\n"); }
+                wide[i]=w;
+            }
+            const char *fn = (strcmp(e->call.name,"comake")==0) ? "oh_comake" : "oh_coswitch";
+            fprintf(out, "  call void @%s(", fn);
+            for (size_t i=0;i<n && i<4;i++){ if(i)fprintf(out,", "); fprintf(out,"i64 %%t%d",wide[i]); }
+            fprintf(out, ")\n");
+            return new_iconst(0);
         }
         /* Bit intrinsics → single hardware instruction. */
         if (strcmp(e->call.name,"popcount")==0 || strcmp(e->call.name,"clz")==0 ||
@@ -2103,9 +2129,40 @@ void codegen(Program *prog, const char *out_ll_path, TargetTriple target) {
     /* SIMD reduction builtins, lowered to self-contained helper functions whose
      * tight loops clang -O3 vectorizes (mem-free phi loops). Emitted only when
      * used. Read-only pointers marked noalias so dot's two pointers vectorize. */
-    g_uses_vsum = g_uses_dot = 0;
+    g_uses_vsum = g_uses_dot = g_uses_co = 0;
     for (size_t i = 0; i < prog->func_count; i++)
         scan_simd_stmts(prog->funcs[i].body, prog->funcs[i].body_len);
+    /* Stackful-coroutine context switch, emitted as module-level asm (no separate
+     * file / link flags; works native + freestanding). Only when used. */
+    if (g_uses_co) {
+        fprintf(out, "declare void @oh_coswitch(i64, i64)\n");
+        fprintf(out, "declare void @oh_comake(i64, i64, i64, i64)\n");
+        static const char *x86co[] = {
+            ".text",".globl oh_coswitch","oh_coswitch:",
+            "  pushq %rbx","  pushq %rbp","  pushq %r12","  pushq %r13","  pushq %r14","  pushq %r15",
+            "  movq %rsp, (%rdi)","  movq (%rsi), %rsp",
+            "  popq %r15","  popq %r14","  popq %r13","  popq %r12","  popq %rbp","  popq %rbx","  ret",
+            ".globl oh_comake","oh_comake:",
+            "  andq $-16, %rsi","  subq $56, %rsi",
+            "  movq %rdx, 24(%rsi)","  movq %rcx, 40(%rsi)",
+            "  leaq oh_cotramp(%rip), %rax","  movq %rax, 48(%rsi)","  movq %rsi, (%rdi)","  ret",
+            "oh_cotramp:","  movq %rbx, %rdi","  callq *%r12","  ud2", 0 };
+        static const char *armco[] = {
+            ".text",".globl oh_coswitch","oh_coswitch:",
+            "  stp x19, x20, [sp, #-96]!","  stp x21, x22, [sp, #16]","  stp x23, x24, [sp, #32]",
+            "  stp x25, x26, [sp, #48]","  stp x27, x28, [sp, #64]","  stp x29, x30, [sp, #80]",
+            "  mov x2, sp","  str x2, [x0]","  ldr x2, [x1]","  mov sp, x2",
+            "  ldp x29, x30, [sp, #80]","  ldp x27, x28, [sp, #64]","  ldp x25, x26, [sp, #48]",
+            "  ldp x23, x24, [sp, #32]","  ldp x21, x22, [sp, #16]","  ldp x19, x20, [sp], #96","  ret",
+            ".globl oh_comake","oh_comake:",
+            "  and x1, x1, #-16","  sub x1, x1, #96",
+            "  str x2, [x1]","  str x3, [x1, #8]",
+            "  adrp x4, oh_cotramp","  add x4, x4, :lo12:oh_cotramp","  str x4, [x1, #88]","  str x1, [x0]","  ret",
+            "oh_cotramp:","  mov x0, x20","  blr x19","  brk #0", 0 };
+        const char **co = target_is_aarch64() ? armco : x86co;
+        for (int i = 0; co[i]; i++) fprintf(out, "module asm \"%s\"\n", co[i]);
+        fprintf(out, "\n");
+    }
     if (g_uses_vsum) {
         fprintf(out,
             "define internal fastcc i32 @__oh_vsum(ptr noalias readonly %%a, i32 %%n) unnamed_addr nounwind nosync nofree willreturn mustprogress {\n"

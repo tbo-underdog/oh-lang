@@ -1,0 +1,28 @@
+// Stackful coroutines: comake seeds a context, coswitch swaps in/out. The coroutine
+// yields 3 times; main checks state persists across each switch.
+$Co{self:6 main:6 n:6}
+#cofn(s:*Co):v{
+s.n=1
+coswitch(s.self,s.main)
+s.n=2
+coswitch(s.self,s.main)
+s.n=3
+coswitch(s.self,s.main)}
+#main(){
+coctx:[1]6=0
+mainctx:[1]6=0
+costack:[4096]6=0
+base:=(6)(&costack[0])
+top:=base+32768
+s:Co
+s.self=(6)(&coctx[0])
+s.main=(6)(&mainctx[0])
+s.n=0
+comake(&coctx[0],top,&cofn,&s)
+coswitch(&mainctx[0],&coctx[0])
+?s.n!=1{\1}
+coswitch(&mainctx[0],&coctx[0])
+?s.n!=2{\2}
+coswitch(&mainctx[0],&coctx[0])
+?s.n!=3{\3}
+0}

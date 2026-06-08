@@ -260,6 +260,15 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
         break;
     }
     case EX_UNOP: {
+        /* &func — address of a function (opaque code pointer). Recognized before
+         * operand inference because a function name isn't a variable. */
+        if (e->unop.op == UOP_ADDROF && e->unop.operand->kind == EX_IDENT
+            && lookup_func(e->unop.operand->ident)) {
+            Type *pt = make_type(a, TY_PTR);
+            pt->inner = make_type(a, TY_I8);
+            e->typ = pt;
+            return e->typ;
+        }
         Type *ot = infer(e->unop.operand, ss, a);
         switch (e->unop.op) {
         case UOP_NEG:
@@ -313,6 +322,14 @@ static Type *infer(Expr *e, ScopeStack *ss, Arena *a) {
          * portably handle ABI-divergent structs (e.g. struct epoll_event). i64. */
         if (strcmp(e->call.name,"archid")==0) {
             e->typ = make_type(a, TY_I64);
+            return e->typ;
+        }
+        /* Stackful-coroutine primitives (void). coswitch(old_ctx, new_ctx) swaps
+         * execution contexts; comake(ctx, stacktop, &fn, arg) seeds a fresh context
+         * so the first switch-in runs fn(arg) on its own stack. */
+        if (strcmp(e->call.name,"coswitch")==0 || strcmp(e->call.name,"comake")==0) {
+            for (size_t i = 0; i < e->call.argc; i++) infer(e->call.args[i], ss, a);
+            e->typ = make_type(a, TY_VOID);
             return e->typ;
         }
         /* Bit intrinsics: popcount/clz/ctz/bswap — 1 int arg, return i32. */
