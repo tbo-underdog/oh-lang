@@ -1,22 +1,39 @@
-// TLS 1.3 client. Milestone 2: ClientHello -> ServerHello -> key schedule -> decrypt
-// the server's first encrypted handshake record (EncryptedExtensions). x25519 +
-// AES-128-GCM + SHA256. Connects 127.0.0.1:4433.
+// TLS 1.3 client (x25519 + AES-128-GCM + SHA256). Completes the handshake against a
+// real server and exchanges application data. Certificate verification is NOT yet done
+// (INSECURE — next step). Needs std/core,net,x25519,sha256,hkdf,tls13,aes,gcm.
 #w16(b:c,o,v):v{b[o]=(1)((v>>8)&255) b[o+1]=(1)(v&255)}
 #r16(b:c,o:6):6{(((3)b[o]&255)<<8)|((3)b[o+1]&255)}
-// ensure the record buffer holds at least `need` bytes (st[0]=bufn)
+#r24(b:c,o:6):6{(((3)b[o]&255)<<16)|(((3)b[o+1]&255)<<8)|((3)b[o+2]&255)}
 #rd_fill(fd:6,buf:c,st:*6,need:6):v{
 ~st[0]<need{
-r:=sys(0,fd,&buf[st[0]],16384-st[0])
+r:=sys(0,fd,&buf[st[0]],32768-st[0])
 ?r<=0{\}
 st[0]=st[0]+r
 }}
+#mk_nonce(out:c,iv:c,seq:6):v{
+@i,12{out[i]=iv[i]}
+@i,8{out[11-i]=(1)((3)out[11-i]^((seq>>(i*8))&255))}}
+// AEAD-encrypt `dlen` bytes of `data` with inner content-type `ctype`, send as a record
+#send_rec(fd:6,rk:c,nr:6,sb:c,iv:c,seq:6,ctype,data:c,dlen):v{
+inner:[16400]1=0
+@i,dlen{inner[i]=data[i]}
+inner[dlen]=(1)ctype
+ilen:=dlen+1
+nonce:[12]1=0 mk_nonce(nonce,iv,seq)
+rec:[16500]1=0
+rec[0]=(1)23 rec[1]=(1)3 rec[2]=(1)3 w16(rec,3,ilen+16)
+aad:[5]1=0 @i,5{aad[i]=rec[i]}
+ct:[16400]1=0 tag:[16]1=0
+aes_gcm_encrypt(rk,nr,sb,nonce,aad,5,inner,ilen,ct,tag)
+@i,ilen{rec[5+i]=ct[i]}
+@i,16{rec[5+ilen+i]=tag[i]}
+sys(1,fd,&rec[0],5+ilen+16)}
 #main(){
 fd:=connect_to(127,0,0,1,4433)
 ?fd<0{\1}
 priv:[32]1=0 rand_bytes(priv,32)
 basep:[32]1=0 basep[0]=(1)9
 pub:[32]1=0 x25519(pub,priv,basep)
-// ClientHello body
 hb:[512]1=0
 o:=0
 hb[o]=(1)3 hb[o+1]=(1)3 o=o+2
@@ -36,89 +53,155 @@ w16(hb,o,0x33) o=o+2 w16(hb,o,38) o=o+2 w16(hb,o,36) o=o+2 w16(hb,o,0x1d) o=o+2 
 @i,32{hb[o+i]=pub[i]} o=o+32
 w16(hb,extlenpos,o-extlenpos-2)
 bodylen:=o
-// transcript buffer: append ClientHello handshake message
-tr:[8192]1=0
+tr:[16384]1=0
 trlen:=(6)0
 tr[0]=(1)1 tr[1]=(1)0 tr[2]=(1)((bodylen>>8)&255) tr[3]=(1)(bodylen&255)
 @i,bodylen{tr[4+i]=hb[i]}
 trlen=(6)(4+bodylen)
-// send as record
 rec:[700]1=0
 rec[0]=(1)22 rec[1]=(1)3 rec[2]=(1)1 w16(rec,3,(3)trlen)
 @i,trlen{rec[5+i]=tr[i]}
 sys(1,fd,&rec[0],5+trlen)
-// ---- read records ----
-buf:[16384]1=0
+buf:[32768]1=0
 st:[2]6=0
 pos:=(6)0
-// record 1: ServerHello (plaintext, type 22)
 rd_fill(fd,buf,st,pos+5)
 ?((3)buf[pos]&255)!=22{\2}
 shlen:=r16(buf,pos+3)
 rd_fill(fd,buf,st,pos+5+shlen)
 shoff:=pos+5
-// append ServerHello handshake message to transcript
 @i,shlen{tr[trlen+i]=buf[shoff+i]}
 trlen=trlen+shlen
-// parse ServerHello to find server key_share (group 0x001d)
-// handshake: type(1)=2,len(3),body: ver(2),random(32),sidlen(1)+sid,cipher(2),comp(1),extlen(2),exts
 p:=shoff+4
 p=p+2+32
 slen:=(6)((3)buf[p]&255) p=p+1+slen
 p=p+2+1
 extslen:=r16(buf,p) p=p+2
 exend:=p+extslen
-spub:[32]1=0
-found:=0
+spub:[32]1=0 found:=0
 ~p<exend{
 et:=r16(buf,p)
 el:=r16(buf,p+2)
-?et==0x33{
-// key_share: group(2),keylen(2),key
-@i,32{spub[i]=buf[p+4+4+i]}
-found=1
-}
+?et==0x33{@i,32{spub[i]=buf[p+8+i]} found=1}
 p=p+4+el
 }
 ?found==0{\3}
-// shared secret
 shared:[32]1=0 x25519(shared,priv,spub)
-// transcript hash (CH||SH)
 thash:[32]1=0 sha256(tr,(3)trlen,thash)
-// key schedule
 hs:[32]1=0 cs:[32]1=0 ss:[32]1=0
 tls_handshake_secrets(shared,thash,hs,cs,ss)
-skey:[16]1=0 siv:[12]1=0
-tls_traffic_keyiv(ss,skey,siv)
+skey:[16]1=0 siv:[12]1=0 tls_traffic_keyiv(ss,skey,siv)
+ckey:[16]1=0 civ:[12]1=0 tls_traffic_keyiv(cs,ckey,civ)
 sb:[256]1=0 aes_sbox(sb)
-rk:[240]1=0 nr:=aes_expand(skey,16,sb,rk)
+srk:[240]1=0 snr:=aes_expand(skey,16,sb,srk)
+crk:[240]1=0 cnr:=aes_expand(ckey,16,sb,crk)
 pos=pos+5+shlen
-// skip records until first encrypted application_data (type 23); skip CCS (type 20)
-seq:=0
-~1{
+// ---- read & decrypt server flight into fl; parse handshake msgs ----
+fl:[16384]1=0
+fllen:=(6)0
+fo:=(6)0
+sseq:=(6)0
+done:=0
+thash_cv:[32]1=0
+~done==0{
 rd_fill(fd,buf,st,pos+5)
 rt:=(3)buf[pos]&255
 rl:=r16(buf,pos+3)
 rd_fill(fd,buf,st,pos+5+rl)
 ?rt==23{
-// decrypt: nonce = siv ^ seq(8B BE in low bytes); aad = 5-byte header
-nonce:[12]1=0 @i,12{nonce[i]=siv[i]}
-// seq=0 for first -> nonce=siv; (general XOR omitted, seq fits in low byte here)
+nonce:[12]1=0 mk_nonce(nonce,siv,sseq)
 aad:[5]1=0 @i,5{aad[i]=buf[pos+i]}
 ctlen:=rl-16
 ct:[16384]1=0 @i,ctlen{ct[i]=buf[pos+5+i]}
 tag:[16]1=0 @i,16{tag[i]=buf[pos+5+ctlen+i]}
 ptn:[16384]1=0
-ok:=aes_gcm_decrypt(rk,nr,sb,nonce,aad,5,ct,(3)ctlen,tag,ptn)
-?ok!=1{sys(1,1,"DECRYPT FAIL\n",13) \4}
-// inner: content || real_type || zeros. first byte should be 0x08 (EncryptedExtensions)
-hd:="0123456789abcdef"
-sys(1,1,"decrypted inner first byte=0x",29)
-sys(1,1,&hd[((3)ptn[0]>>4)&15],1) sys(1,1,&hd[(3)ptn[0]&15],1)
+?aes_gcm_decrypt(srk,snr,sb,nonce,aad,5,ct,(3)ctlen,tag,ptn)!=1{\4}
+sseq=sseq+1
+// strip trailing zeros + content-type byte
+j:=ctlen-1
+~j>=0&&(3)ptn[j]==0{j=j-1}
+@i,j{fl[fllen+i]=ptn[i]}
+fllen=fllen+j
+// parse complete handshake messages from fo
+~fo+4<=fllen{
+mt:=(3)fl[fo]&255
+ml:=r24(fl,fo+1)
+?fo+4+ml>fllen{fo=fo}      // incomplete; wait for more (break via cond next)
+?fo+4+ml<=fllen{
+?mt==20{
+sha256(tr,(3)trlen,thash_cv)
+@i,4+ml{tr[trlen+i]=fl[fo+i]}
+trlen=trlen+4+ml
+done=1
+}:{
+@i,4+ml{tr[trlen+i]=fl[fo+i]}
+trlen=trlen+4+ml
+}
+fo=fo+4+ml
+}
+?fo+4+ml>fllen{fo=fo}
+?done==1{fo=fllen}
+}
+}
+pos=pos+5+rl
+}
+// ---- verify server Finished ----
+fkey:[32]1=0 tls_expand_label(ss,"finished",8,siv,0,32,fkey)
+// server Finished body is the last 32 bytes appended to tr; expected=HMAC(fkey,thash_cv)
+exp:[32]1=0 hmac(fkey,32,thash_cv,32,exp)
+sfin:[32]1=0 @i,32{sfin[i]=tr[trlen-32+i]}
+?memcmp(exp,sfin,32)!=0{sys(1,1,"SERVER FINISHED BAD\n",20) \5}
+sys(1,1,"server Finished verified\n",25)
+// ---- send client Finished ----
+thash_sf:[32]1=0 sha256(tr,(3)trlen,thash_sf)
+cfkey:[32]1=0 tls_expand_label(cs,"finished",8,civ,0,32,cfkey)
+cvd:[32]1=0 hmac(cfkey,32,thash_sf,32,cvd)
+cfin:[40]1=0 cfin[0]=(1)20 cfin[1]=(1)0 cfin[2]=(1)0 cfin[3]=(1)32
+@i,32{cfin[4+i]=cvd[i]}
+send_rec(fd,crk,cnr,sb,civ,0,22,cfin,36)
+// ---- app keys (master secret schedule) ----
+z:[32]1=0
+derived2:[32]1=0 tls_derive_secret(hs,"derived",7,z,0,derived2)
+master:[32]1=0 hkdf_extract(derived2,32,z,32,master)
+cap:[32]1=0 sap:[32]1=0
+tls_expand_label(master,"c ap traffic",12,thash_sf,32,32,cap)
+tls_expand_label(master,"s ap traffic",12,thash_sf,32,32,sap)
+cak:[16]1=0 caiv:[12]1=0 tls_traffic_keyiv(cap,cak,caiv)
+sak:[16]1=0 saiv:[12]1=0 tls_traffic_keyiv(sap,sak,saiv)
+cark:[240]1=0 carn:=aes_expand(cak,16,sb,cark)
+sark:[240]1=0 sarn:=aes_expand(sak,16,sb,sark)
+// ---- send HTTP request as application data (client app seq 0) ----
+req:[64]1=0 rq:=bcopy(req,0,"GET / HTTP/1.0\r\n\r\n")
+send_rec(fd,cark,carn,sb,caiv,0,23,req,rq)
+// ---- read server app-data response, decrypt, print first line ----
+aseq:=(6)0
+~1{
+rd_fill(fd,buf,st,pos+5)
+rt2:=(3)buf[pos]&255
+rl2:=r16(buf,pos+3)
+rd_fill(fd,buf,st,pos+5+rl2)
+?rt2==23{
+nonce:[12]1=0 mk_nonce(nonce,saiv,aseq)
+aad:[5]1=0 @i,5{aad[i]=buf[pos+i]}
+cl:=rl2-16
+ct:[16384]1=0 @i,cl{ct[i]=buf[pos+5+i]}
+tag:[16]1=0 @i,16{tag[i]=buf[pos+5+cl+i]}
+ptn:[16384]1=0
+?aes_gcm_decrypt(sark,sarn,sb,nonce,aad,5,ct,(3)cl,tag,ptn)!=1{\6}
+aseq=aseq+1
+// strip trailing zeros + content-type
+j:=cl-1
+~j>=0&&(3)ptn[j]==0{j=j-1}
+ct2:=(3)ptn[j]&255
+?ct2==23{
+// application data: print it
+sys(1,1,"APP DATA: ",10)
+sys(1,1,&ptn[0],j)
 sys(1,1,"\n",1)
 sys(3,fd)
 \0
 }
-pos=pos+5+rl
+}
+pos=pos+5+rl2
 }
 0}
