@@ -1,0 +1,153 @@
+// P-256 (secp256r1) ECDHE. Montgomery field (16x16-bit limbs, m0inv=1),
+// Jacobian points. Needs std/core. Verified vs a big-int reference + openssl ECDH.
+#p256_p(o:*6):v{
+o[0]=(6)0xffff o[1]=(6)0xffff o[2]=(6)0xffff o[3]=(6)0xffff o[4]=(6)0xffff o[5]=(6)0xffff o[6]=(6)0x0000 o[7]=(6)0x0000
+o[8]=(6)0x0000 o[9]=(6)0x0000 o[10]=(6)0x0000 o[11]=(6)0x0000 o[12]=(6)0x0001 o[13]=(6)0x0000 o[14]=(6)0xffff o[15]=(6)0xffff
+}
+#p256_r2(o:*6):v{
+o[0]=(6)0x0003 o[1]=(6)0x0000 o[2]=(6)0x0000 o[3]=(6)0x0000 o[4]=(6)0xffff o[5]=(6)0xffff o[6]=(6)0xfffb o[7]=(6)0xffff
+o[8]=(6)0xfffe o[9]=(6)0xffff o[10]=(6)0xffff o[11]=(6)0xffff o[12]=(6)0xfffd o[13]=(6)0xffff o[14]=(6)0x0004 o[15]=(6)0x0000
+}
+#p256_gxm(o:*6):v{
+o[0]=(6)0x143c o[1]=(6)0x18a9 o[2]=(6)0x30d4 o[3]=(6)0x79e7 o[4]=(6)0xb601 o[5]=(6)0x5fed o[6]=(6)0x95fc o[7]=(6)0x75ba
+o[8]=(6)0x2510 o[9]=(6)0x7762 o[10]=(6)0x732b o[11]=(6)0x79fb o[12]=(6)0x55c6 o[13]=(6)0xa537 o[14]=(6)0x5f76 o[15]=(6)0x1890
+}
+#p256_gym(o:*6):v{
+o[0]=(6)0x560a o[1]=(6)0xce95 o[2]=(6)0x5357 o[3]=(6)0xddf2 o[4]=(6)0xe45c o[5]=(6)0xba19 o[6]=(6)0xb8e4 o[7]=(6)0x8b4a
+o[8]=(6)0xf325 o[9]=(6)0xdd21 o[10]=(6)0x8688 o[11]=(6)0xd2e8 o[12]=(6)0x5d85 o[13]=(6)0x2588 o[14]=(6)0xff18 o[15]=(6)0x8571
+}
+#p256_rm(o:*6):v{
+o[0]=(6)0x0001 o[1]=(6)0x0000 o[2]=(6)0x0000 o[3]=(6)0x0000 o[4]=(6)0x0000 o[5]=(6)0x0000 o[6]=(6)0xffff o[7]=(6)0xffff
+o[8]=(6)0xffff o[9]=(6)0xffff o[10]=(6)0xffff o[11]=(6)0xffff o[12]=(6)0xfffe o[13]=(6)0xffff o[14]=(6)0x0000 o[15]=(6)0x0000
+}
+#p256_pm2(o:*6):v{
+o[0]=(6)0xfffd o[1]=(6)0xffff o[2]=(6)0xffff o[3]=(6)0xffff o[4]=(6)0xffff o[5]=(6)0xffff o[6]=(6)0x0000 o[7]=(6)0x0000
+o[8]=(6)0x0000 o[9]=(6)0x0000 o[10]=(6)0x0000 o[11]=(6)0x0000 o[12]=(6)0x0001 o[13]=(6)0x0000 o[14]=(6)0xffff o[15]=(6)0xffff
+}
+#p256_mmul(out:*6,A:*6,B:*6):v{
+PP:[16]6=0 p256_p(PP)
+t:[18]6=0
+i:=0 j:=0 c:=(6)0 s:=(6)0 mm:=(6)0
+~i<16{
+c=0 j=0
+~j<16{s=t[j]+A[i]*B[j]+c t[j]=s&0xffff c=s>>16 j=j+1}
+s=t[16]+c t[16]=s&0xffff t[17]=s>>16
+mm=t[0]&0xffff
+c=0 j=0
+~j<16{s=t[j]+mm*PP[j]+c t[j]=s&0xffff c=s>>16 j=j+1}
+s=t[16]+c t[16]=s&0xffff t[17]=t[17]+(s>>16)
+j=0 ~j<17{t[j]=t[j+1] j=j+1}
+t[17]=0
+i=i+1
+}
+d:[16]6=0 bw:=(6)0
+j=0
+~j<16{
+s=t[j]-PP[j]-bw
+?s<0{d[j]=s+65536 bw=1}:{d[j]=s bw=0}
+j=j+1
+}
+?(t[16]-bw)>=0{@k,16{out[k]=d[k]}}:{@k,16{out[k]=t[k]}}}
+#p256_fadd(o:*6,A:*6,B:*6):v{
+PP:[16]6=0 p256_p(PP)
+t:[16]6=0 c:=(6)0 s:=(6)0 j:=0
+~j<16{s=A[j]+B[j]+c t[j]=s&0xffff c=s>>16 j=j+1}
+d:[16]6=0 bw:=(6)0
+j=0
+~j<16{
+s=t[j]-PP[j]-bw
+?s<0{d[j]=s+65536 bw=1}:{d[j]=s bw=0}
+j=j+1
+}
+?(c-bw)>=0{@k,16{o[k]=d[k]}}:{@k,16{o[k]=t[k]}}}
+#p256_fsub(o:*6,A:*6,B:*6):v{
+PP:[16]6=0 p256_p(PP)
+t:[16]6=0 bw:=(6)0 s:=(6)0 j:=0
+~j<16{
+s=A[j]-B[j]-bw
+?s<0{t[j]=s+65536 bw=1}:{t[j]=s bw=0}
+j=j+1
+}
+?bw==1{c:=(6)0 j=0 ~j<16{s=t[j]+PP[j]+c t[j]=s&0xffff c=s>>16 j=j+1}}
+@k,16{o[k]=t[k]}}
+#p256_m2(o:*6,A:*6):v{p256_fadd(o,A,A)}
+#p256_m3(o:*6,A:*6):v{p256_fadd(o,A,A) p256_fadd(o,o,A)}
+#p256_m4(o:*6,A:*6):v{p256_fadd(o,A,A) p256_fadd(o,o,o)}
+#p256_m8(o:*6,A:*6):v{p256_fadd(o,A,A) p256_fadd(o,o,o) p256_fadd(o,o,o)}
+#p256_finv(o:*6,A:*6):v{
+e:[16]6=0 p256_pm2(e)
+r:[16]6=0 p256_rm(r)
+base:[16]6=0 @i,16{base[i]=A[i]}
+bi:=0
+~bi<256{
+?((e[bi/16]>>(bi%16))&1)==1{p256_mmul(r,r,base)}
+p256_mmul(base,base,base)
+bi=bi+1
+}
+@i,16{o[i]=r[i]}}
+#p256_iszero(A:*6):6{acc:=(6)0 @i,16{acc=acc|A[i]} ?acc==0{\1} 0}
+#p256_jdbl(out:*6,P:*6):v{
+dl:[16]6=0 ga:[16]6=0 be:[16]6=0 al:[16]6=0 t0:[16]6=0 t1:[16]6=0 x3:[16]6=0 y3:[16]6=0 z3:[16]6=0
+p256_mmul(dl,&P[32],&P[32])
+p256_mmul(ga,&P[16],&P[16])
+p256_mmul(be,&P[0],ga)
+p256_fsub(t0,&P[0],dl) p256_fadd(t1,&P[0],dl) p256_mmul(t0,t0,t1) p256_m3(al,t0)
+p256_mmul(x3,al,al) p256_m8(t0,be) p256_fsub(x3,x3,t0)
+p256_fadd(t0,&P[16],&P[32]) p256_mmul(t0,t0,t0) p256_fsub(t0,t0,ga) p256_fsub(z3,t0,dl)
+p256_m4(t0,be) p256_fsub(t0,t0,x3) p256_mmul(t0,al,t0)
+p256_mmul(t1,ga,ga) p256_m8(t1,t1) p256_fsub(y3,t0,t1)
+@i,16{out[i]=x3[i]} @i,16{out[16+i]=y3[i]} @i,16{out[32+i]=z3[i]}}
+#p256_jadd(out:*6,P:*6,Q:*6):v{
+?p256_iszero(&P[32])==1{@i,48{out[i]=Q[i]} \}
+?p256_iszero(&Q[32])==1{@i,48{out[i]=P[i]} \}
+z11:[16]6=0 z22:[16]6=0 u1:[16]6=0 u2:[16]6=0 s1:[16]6=0 s2:[16]6=0 h:[16]6=0 r:[16]6=0
+hh:[16]6=0 hhh:[16]6=0 v:[16]6=0 t0:[16]6=0 x3:[16]6=0 y3:[16]6=0 z3:[16]6=0
+p256_mmul(z11,&P[32],&P[32]) p256_mmul(z22,&Q[32],&Q[32])
+p256_mmul(u1,&P[0],z22) p256_mmul(u2,&Q[0],z11)
+p256_mmul(s1,&P[16],&Q[32]) p256_mmul(s1,s1,z22)
+p256_mmul(s2,&Q[16],&P[32]) p256_mmul(s2,s2,z11)
+p256_fsub(h,u2,u1) p256_fsub(r,s2,s1)
+?p256_iszero(h)==1{?p256_iszero(r)==1{p256_jdbl(out,P) \} @i,48{out[i]=0} \}
+p256_mmul(hh,h,h) p256_mmul(hhh,h,hh) p256_mmul(v,u1,hh)
+p256_mmul(x3,r,r) p256_fsub(x3,x3,hhh) p256_m2(t0,v) p256_fsub(x3,x3,t0)
+p256_fsub(t0,v,x3) p256_mmul(t0,r,t0) p256_mmul(y3,s1,hhh) p256_fsub(y3,t0,y3)
+p256_mmul(z3,&P[32],&Q[32]) p256_mmul(z3,z3,h)
+@i,16{out[i]=x3[i]} @i,16{out[16+i]=y3[i]} @i,16{out[32+i]=z3[i]}}
+#p256_smul(out:*6,scalar:c,Q:*6):v{
+@i,48{out[i]=0}
+i:=255
+~i>=0{
+p256_jdbl(out,out)
+?(((3)scalar[31-i/8]&255)>>(i%8)&1)==1{p256_jadd(out,out,Q)}
+i=i-1
+}}
+#p256_be2limb(o:*6,b:c):v{@i,16{o[i]=((3)b[31-2*i]&255)|(((3)b[30-2*i]&255)<<8)}}
+#p256_limb2be(out:c,A:*6):v{@i,16{out[31-2*i]=(1)(A[i]&255) out[30-2*i]=(1)((A[i]>>8)&255)}}
+#p256_to_affx(o:*6,P:*6):v{
+zi:[16]6=0 p256_finv(zi,&P[32])
+zi2:[16]6=0 p256_mmul(zi2,zi,zi)
+xm:[16]6=0 p256_mmul(xm,&P[0],zi2)
+one:[16]6=0 one[0]=1
+p256_mmul(o,xm,one)}
+#p256_pubkey(out:c,scalar:c):6{
+G:[48]6=0 p256_gxm(&G[0]) p256_gym(&G[16]) p256_rm(&G[32])
+res:[48]6=0 p256_smul(res,scalar,G)
+zi:[16]6=0 p256_finv(zi,&res[32])
+zi2:[16]6=0 p256_mmul(zi2,zi,zi)
+zi3:[16]6=0 p256_mmul(zi3,zi2,zi)
+xm:[16]6=0 p256_mmul(xm,&res[0],zi2)
+ym:[16]6=0 p256_mmul(ym,&res[16],zi3)
+one:[16]6=0 one[0]=1
+xa:[16]6=0 ya:[16]6=0 p256_mmul(xa,xm,one) p256_mmul(ya,ym,one)
+out[0]=(1)4 p256_limb2be(&out[1],xa) p256_limb2be(&out[33],ya)
+0}
+#p256_ecdh(out:c,scalar:c,peer:c):6{
+qx:[16]6=0 qy:[16]6=0
+p256_be2limb(qx,&peer[1]) p256_be2limb(qy,&peer[33])
+r2:[16]6=0 p256_r2(r2)
+Q:[48]6=0
+p256_mmul(&Q[0],qx,r2) p256_mmul(&Q[16],qy,r2) p256_rm(&Q[32])
+res:[48]6=0 p256_smul(res,scalar,Q)
+xa:[16]6=0 p256_to_affx(xa,res)
+p256_limb2be(out,xa)
+0}
