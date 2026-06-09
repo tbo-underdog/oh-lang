@@ -28,3 +28,11 @@ Server is authenticated (Ed25519 CertificateVerify; forged sigs rejected). Trust
 anchoring = pinning (load_pin) for known servers. Remaining for arbitrary CAs:
 ECDSA-P256/RSA cert signatures + X.509 chain validation. Auth here is trust (Postgres
 SCRAM-over-TLS is a further compose of std/scram with this channel).
+
+## With SCRAM-SHA-256 password auth (`pgtls_scram.oh`)
+`pgtls_scram.oh` adds full **SCRAM-SHA-256** client authentication over the TLS channel
+(SASL handshake via std/scram + std/pg framing over `tls_send`/`tls_recv`). Verified vs
+real PostgreSQL 16 (ssl=on, password_encryption=scram-sha-256), x86-64 AND aarch64:
+`TLS established (cert verified)` / `SCRAM authenticated over TLS` / `query -> scram-tls-ok`.
+`./test_scram.sh`. This is a complete server-authenticated + client-authenticated,
+encrypted database client — entirely in Oh.
