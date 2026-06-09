@@ -1,0 +1,21 @@
+// sha256/hmac on large inputs (past the old 4080-byte scratch cap).
+#th(b:c,n,out:c):v{
+hd:="0123456789abcdef"
+@i,n{out[i*2]=hd[((3)b[i]>>4)&15] out[i*2+1]=hd[(3)b[i]&15]}}
+#main():3{
+buf:[100000]1=0
+@i,100000{buf[i]=(1)((i*7+3)&255)}
+o:[32]1=0
+hx:[66]1=0
+sha256(buf,10000,o)
+th(o,32,hx)
+?memcmp(hx,"6e97d8601cb17906a4819e0fcc8d03150d3e4331353ecaa516c0084cadad54dd",64)!=0{\1}
+sha256(buf,100000,o)
+th(o,32,hx)
+?memcmp(hx,"d96bab6a55ee326ba206dd4a85a6e95e14360d7fabbf448f03e689c24382b7d0",64)!=0{\2}
+k:[200]1=0
+@i,200{k[i]=(1)((i*13+1)&255)}
+hmac(k,100,buf,50000,o)
+th(o,32,hx)
+?memcmp(hx,"03d044cec37992c3231e668b97f05db16f5e7051671b5f19a4e0e7773c608b17",64)!=0{\3}
+0}
