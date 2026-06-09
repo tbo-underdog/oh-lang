@@ -32,7 +32,19 @@ decoded form and the tests.
   zero dependencies). Ideal for `FROM scratch` containers.
 - **A bump-allocator memory model** sized at creation, with bounds-checked
   allocation (aborts rather than corrupts) and scope-based reclamation.
+- **Concurrent servers** — an epoll event loop with stackful coroutines (handlers
+  read like blocking code, ~half the tokens of a hand state machine, same throughput),
+  a bounded connection pool, and `SO_REUSEPORT` multicore prefork.
+- **A from-scratch crypto + TLS 1.3 stack** (no libc): SHA-256/512, HMAC, HKDF, AES,
+  AES-GCM, X25519, Ed25519, P-256 — each vector-verified — and a reusable TLS 1.3
+  client (`std/tls`) that completes real handshakes with OpenSSL and PostgreSQL, with
+  Ed25519 certificate verification and pinning. (Software crypto, no AES-NI; trust is
+  cert-pinning, not full CA-chain/RSA/ECDSA yet — see SPEC.md.)
+- **Real protocol clients** — Redis, MongoDB, and PostgreSQL (CRUD + SCRAM-SHA-256
+  password auth), verified against real servers, including **Postgres-over-TLS**.
 - **A decoder** (`ohtranslate`) so humans can always read what the AI wrote.
+
+Everything above is verified on **x86-64 and ARM64** (the test suite runs both).
 
 ## Where it runs (honest)
 

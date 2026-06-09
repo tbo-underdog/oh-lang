@@ -24,7 +24,10 @@ the syntax; load it before generating Oh.
   Write **one statement per line**. (Spaces/tabs are ignored.)
 - Line comments: `// ... ` to end of line. No block comments.
 - Identifiers: `[A-Za-z_][A-Za-z0-9_]*`.
-- `T` (capital T) is the boolean literal `true`.
+- `T` is the boolean literal `true`; `F` is `false`. **Reserved** — do not use `T`/`F`
+  as variable names (a local named `F` parses as `false`).
+- Integer literals: decimal (`255`) or **hexadecimal** (`0xff`, `0x8000000000000000`).
+  Hex literals carry their full 64-bit value (`0xffffffff` = 4294967295).
 
 ## 3. Types (single-token codes)
 
@@ -91,8 +94,11 @@ s}
   (`a[i]+=x`), or deref (`!p+=x`). Sugar for `x = x OP e`.
 - **Implicit integer widening**: a narrower int auto-widens to a wider one (i32→i64, etc.)
   in arithmetic, calls, assignments, and returns (never narrows — that needs `(T)`).
-- Integer literals are **polymorphic**: a literal adopts the int type it is used
-  with (so `b[0]=65` stores i8, `fd<0` compares against i64, etc.).
+- Integer literals are typed **by value**: a literal that fits i32 is i32, otherwise i64
+  (so `0x8000000000000000` keeps its bits). A literal also adopts a call parameter's int
+  type, and widens implicitly. **But** `x:=0` infers **i32** — to declare an i64 local
+  from a small literal write `x:=(6)0`; likewise an i64 accumulator fed by i64 values
+  must start as `(6)0`, else you get "Type mismatch in assign".
 
 ## 6. Control flow
 
@@ -135,15 +141,36 @@ Precedence (high→low): unary · `* / %` · `+ -` · `<< >>` · `< > <= >=` · 
 - `&x` address-of; `!p` dereference (load); `!p=v` store through pointer.
 - `a[i]` index (read); `a[i]=v` index assign (write). Works on arrays and pointers.
 - Array literal: `[1,5,3,2,4]`. Element type follows the declared array type.
-- Cast: `(T)expr` — e.g. `(1)x` truncates to i8, `(3)b` sign-extends i8→i32.
+- Cast: `(T)expr` — e.g. `(1)x` truncates to i8, `(3)b` sign-extends i8→i32, `(6)x`
+  widens to i64. **Int↔pointer casts** use a pointer type code: `(*6)addr` makes an
+  i64 from an address into a `*i64`; `(*1)addr` into a byte pointer; `(*Name)addr` into
+  `*Name`. (`c` is **not** a cast-type spelling — use `(*1)`.) An address stored in a
+  struct field as `:6` is cast back with `(*1)`/`(*6)`/`(*Name)`.
+> **GOTCHA — cast vs bitwise-and.** `(6)&x` parses as `6 & x`. Write a cast-of-address
+> as **`(6)(&x)`**.
+> **GOTCHA — sign extension before shift.** `(3)b` (b a byte) sign-extends, so `(3)b>>k`
+> arithmetic-shifts a possibly-negative value. Mask first: `((3)b&255)>>k`. (Same for
+> `(6)b`.) Bit-twiddling on bytes that may have the high bit set must `&255` before `>>`.
 
 ## 9. Builtins (compiler intrinsics — no import needed)
 
 - `sys(num, a1..a6)` → raw syscall, returns i64. Source uses **Linux x86-64
   syscall numbers**; the compiler remaps them per target (x86-64 `syscall`,
   ARM64 `svc #0`). Args may be ints or pointers.
-  - Common numbers: read=0 write=1 close=3 mmap=9 socket=41 connect=42 accept=43
-    bind=49 listen=50 setsockopt=54 exit=60.
+  - Remapped numbers: read=0 write=1 close=3 mmap=9 munmap=11 nanosleep=35
+    getpid=39 socket=41 connect=42 accept=43 sendto=44 recvfrom=45 bind=49 listen=50
+    setsockopt=54 clone=56 exit=60 wait4=61 fcntl=72 clock_gettime=228 epoll_ctl=233
+    epoll_pwait=281 accept4=288 epoll_create1=291 getrandom=318. (Others pass through
+    unchanged — fine only if the number is identical on the target.)
+- `archid()` → compile-time i64: `0` on x86-64, `1` on aarch64. For source that must
+  handle ABI-divergent layouts (e.g. `struct epoll_event` is packed on x86, aligned on
+  arm64): derive the offset from `archid()`.
+- `&func` → the address of a function (an opaque code pointer, i64-compatible).
+- **Stackful coroutines** (module-asm context switch, emitted only when used):
+  `comake(ctx, stacktop, &fn, arg)` seeds a context cell so the first switch-in runs
+  `fn(arg)` on its own stack; `coswitch(old_ctx, new_ctx)` saves the current context
+  and resumes another. Both take addresses (i64). This is how `std/co` builds an
+  epoll coroutine scheduler with blocking-style handlers.
 - `popcount(x)` `clz(x)` `ctz(x)` `bswap(x)` → one hardware instruction each.
 - SIMD reductions over i32 pointers/arrays (compiler emits a vectorized loop —
   no need to hand-write one): `vsum(a, n)` → sum of `a[0..n)`; `dot(a, b, n)` →
@@ -163,6 +190,28 @@ Compile the modules you use alongside your program; unused functions cost 0 byte
 - **std/math**: `iabs` `imin` `imax` `clamp(x,lo,hi)` `ipow(base,exp)` `isqrt(n)`.
 - **std/json**: `json_int(buf,key)` (signed int field, -1 if absent) · `json_has(buf,key)`. Flat-object field extraction, no allocation.
 - **std/mem**: mmap-backed bump heap; `h` is a `[3]6` state array, no globals — the caller holds it. `heap_new(h,bytes)` · `halloc(h,n)` (→i64 addr; cast e.g. `(*3)halloc(h,40)`) · `hused(h)`. Reclaim by scope: `heap_reset(h)` (free everything) · `heap_mark(h)`/`heap_restore(h,m)` (free back to a saved point — a bump arena). On exhaustion (or mmap failure) the allocator aborts (exit 137) rather than corrupting memory; size the heap for the work.
+
+### Networking & servers
+- **std/net** (server primitives, in addition to `connect_to`/`status`): `now_ns()` (monotonic ns) · `rand_bytes(b,n)` (getrandom) · `set_nonblock(fd)` · `listen_on(port)` (SO_REUSEADDR+REUSEPORT, non-blocking, →fd) · `accept_nb(lfd)` (accept4 SOCK_NONBLOCK) · `epoll_new()` `epoll_add(ep,fd,events)` `epoll_del(ep,fd)` `epoll_wait_n(ep,evbuf,maxev,timeout)` · `ev_fd(buf,i)` `ev_events(buf,i)` `ev_set(buf,events,tok)` (arch-portable `epoll_event` via `archid`) · `prefork(n)` (fork n shared-nothing workers; SO_REUSEPORT load-balances) · `getpid()`.
+- **std/co**: stackful-coroutine scheduler over edge-triggered epoll. Handlers are plain **blocking** functions; `co_read`/`co_write` suspend on EAGAIN and the scheduler resumes them. `$Conn`, `$Sched`. `co_init(s,heap,&handler,port,cap)` · `co_run(s)` · `co_read(c,buf,len)` `co_write(c,buf,len)` `co_yield(c)` `co_close(c)`. Bounded connection pool (no leak); pool-full ⇒ backpressure. Define `#conn_handler(c:*Conn)`.
+
+### Crypto (from scratch, no libc; vector-verified — see tests/37–51)
+- **std/sha256**: `sha256(msg,len,out)` (32-byte digest, **unbounded** length) · `hmac(key,klen,msg,mlen,out)` · `pbkdf2(pass,plen,salt,slen,iter,out)`. Plus `sha256_block`/`sha256_init`/`sha256_finish` for streaming.
+- **std/sha512**: `sha512(msg,len,out)` (64-byte digest).
+- **std/hkdf**: `hkdf_extract(salt,sl,ikm,il,prk)` · `hkdf_expand(prk,info,il,len,out)` (RFC 5869).
+- **std/b64**: `b64enc(in,n,out)` `b64dec(in,n,out)` (standard alphabet, `=` padding).
+- **std/aes**: `aes_sbox(sb)` · `aes_expand(key,keylen,sb,rk)` (→rounds) · `aes_encrypt(rk,nr,sb,in,out)` (AES-128/256, FIPS-197). Software (no AES-NI).
+- **std/gcm**: `aes_gcm_encrypt(rk,nr,sb,iv,aad,al,pt,ptlen,ct,tag)` · `aes_gcm_decrypt(...,tag,pt)` (→1 ok / 0 tag-fail). AES-128/256-GCM AEAD, 96-bit IV.
+- **std/x25519**: `x25519(out,scalar,point)` (RFC 7748 ECDHE).
+- **std/ed25519**: `ed25519_verify(pub,msg,msglen,sig)` (→1 valid / 0) — RFC 8032 (needs std/sha512).
+- **std/p256**: `p256_pubkey(out65,scalar)` · `p256_ecdh(out32,scalar,peer65)` (NIST P-256 / secp256r1 ECDHE; Montgomery field).
+- **std/scram**: SCRAM-SHA-256 client (RFC 5802/7677). `scram_salted(...)` · `scram_proof(sp,authmsg,al,out)` · `scram_serversig(...)`.
+- **std/pg**: PostgreSQL v3 wire protocol (BIG-ENDIAN): `pg_startup`, `pg_query`, `pg_authok`/`pg_authtype`, message framing (`pg_hasz`/`pg_find`/`pg_nextrow`/`pg_ncols`/`pg_coln`), SASL framing (`pg_sasl_init`/`pg_sasl_resp`/`pg_rpayload`).
+- **std/tls13**: TLS 1.3 key schedule (RFC 8446 §7.1): `tls_expand_label`, `tls_derive_secret`, `tls_handshake_secrets`, `tls_traffic_keyiv`.
+- **std/tls**: reusable TLS 1.3 client (x25519 **or** P-256 ECDHE, AES-128-GCM, SHA-256, Ed25519 CertificateVerify, optional pinning via `load_pin`). `$Tls` (caller provides buffer pointers + fd). `tls_handshake(t)` → `tls_send(t,data,len)` / `tls_recv(t,out)`. Verified vs real OpenSSL & PostgreSQL.
+> Crypto note: correctness-first and **software-only** (no AES-NI/SHA-NI/ADX), so it is
+> competitive with software C but below hardware-accelerated libraries. Cert trust today
+> = Ed25519 CertificateVerify + pinning; CA-chain / RSA / ECDSA-P256 are not implemented.
 
 ## 11. Complete worked example — TCP echo of a fixed HTTP response
 
