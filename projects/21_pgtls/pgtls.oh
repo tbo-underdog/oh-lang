@@ -30,7 +30,7 @@ t.fd=fd
 t.sbx=(6)(&sbx[0]) t.crk=(6)(&crk[0]) t.civ=(6)(&civ[0])
 t.srk=(6)(&srk[0]) t.siv=(6)(&siv[0]) t.rbuf=(6)(&rbuf[0])
 ?tls_handshake(&t)!=0{sys(1,1,"TLS HANDSHAKE FAILED\n",21) \3}
-sys(1,1,"TLS established to postgres (cert verified)\n",43)
+sys(1,1,"TLS established to postgres (cert verified)\n",44)
 // Postgres startup over TLS
 m:[512]1=0 o:=pg_startup(m,"postgres","postgres")
 tls_send(&t,m,o)

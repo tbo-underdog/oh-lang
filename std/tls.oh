@@ -48,6 +48,8 @@ rb:=(*1)t.rbuf
 priv:[32]1=0 rand_bytes(priv,32)
 basep:[32]1=0 basep[0]=(1)9
 pub:[32]1=0 x25519(pub,priv,basep)
+privp:[32]1=0 rand_bytes(privp,32)
+pubp:[65]1=0 p256_pubkey(pubp,privp)
 hb:[512]1=0
 o:=0
 hb[o]=(1)3 hb[o+1]=(1)3 o=o+2
@@ -60,11 +62,12 @@ tw16(hb,o,2) o=o+2 hb[o]=(1)0x13 hb[o+1]=(1)0x01 o=o+2
 hb[o]=(1)1 o=o+1 hb[o]=(1)0 o=o+1
 extlenpos:=o o=o+2
 tw16(hb,o,0x2b) o=o+2 tw16(hb,o,3) o=o+2 hb[o]=(1)2 o=o+1 tw16(hb,o,0x0304) o=o+2
-tw16(hb,o,0x0a) o=o+2 tw16(hb,o,4) o=o+2 tw16(hb,o,2) o=o+2 tw16(hb,o,0x1d) o=o+2
+tw16(hb,o,0x0a) o=o+2 tw16(hb,o,6) o=o+2 tw16(hb,o,4) o=o+2 tw16(hb,o,0x17) o=o+2 tw16(hb,o,0x1d) o=o+2
 tw16(hb,o,0x0d) o=o+2 tw16(hb,o,8) o=o+2 tw16(hb,o,6) o=o+2
 tw16(hb,o,0x0807) o=o+2 tw16(hb,o,0x0403) o=o+2 tw16(hb,o,0x0804) o=o+2
-tw16(hb,o,0x33) o=o+2 tw16(hb,o,38) o=o+2 tw16(hb,o,36) o=o+2 tw16(hb,o,0x1d) o=o+2 tw16(hb,o,32) o=o+2
-@i,32{hb[o+i]=pub[i]} o=o+32
+tw16(hb,o,0x33) o=o+2 tw16(hb,o,107) o=o+2 tw16(hb,o,105) o=o+2
+tw16(hb,o,0x17) o=o+2 tw16(hb,o,65) o=o+2 @i,65{hb[o+i]=pubp[i]} o=o+65
+tw16(hb,o,0x1d) o=o+2 tw16(hb,o,32) o=o+2 @i,32{hb[o+i]=pub[i]} o=o+32
 tw16(hb,extlenpos,o-extlenpos-2)
 bodylen:=o
 tr:[16384]1=0
@@ -91,15 +94,20 @@ slen:=(6)((3)rb[p]&255) p=p+1+slen
 p=p+2+1
 extslen:=tr16(rb,p) p=p+2
 exend:=p+extslen
-spub:[32]1=0 found:=0
+spub:[65]1=0 found:=0 grp:=(6)0
 ~p<exend{
 et:=tr16(rb,p)
 el:=tr16(rb,p+2)
-?et==0x33{@i,32{spub[i]=rb[p+8+i]} found=1}
+?et==0x33{
+grp=tr16(rb,p+4)
+?grp==0x1d{@i,32{spub[i]=rb[p+8+i]}}:{@i,65{spub[i]=rb[p+8+i]}}
+found=1
+}
 p=p+4+el
 }
 ?found==0{\0-3}
-shared:[32]1=0 x25519(shared,priv,spub)
+shared:[32]1=0
+?grp==0x1d{x25519(shared,priv,spub)}:{p256_ecdh(shared,privp,spub)}
 thash:[32]1=0 sha256(tr,(3)trlen,thash)
 hs:[32]1=0 cs:[32]1=0 ss:[32]1=0
 tls_handshake_secrets(shared,thash,hs,cs,ss)

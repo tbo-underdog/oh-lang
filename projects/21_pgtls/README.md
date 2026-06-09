@@ -1,26 +1,30 @@
-# PostgreSQL-over-TLS client (composition of std/tls.oh + std/pg.oh)
+# Secure PostgreSQL-over-TLS in Oh
 
-`pgtls.oh` layers the Postgres v3 protocol over the TLS 1.3 channel:
-`connect` -> **SSLRequest** -> (server replies `S`) -> `tls_handshake` (x25519 +
-Ed25519 CertificateVerify + optional pinning) -> Postgres startup + query carried over
-`tls_send`/`tls_recv`.
+An Oh program runs SQL against a real PostgreSQL database over an encrypted,
+server-authenticated TLS 1.3 channel — composing std/tls.oh + std/pg.oh + std/p256.oh.
 
-## Status — protocol-correct, blocked on P-256 (HONEST)
-Verified against a real TLS-enabled PostgreSQL 16: the client correctly sends the
-SSLRequest, receives `S`, sends a TLS ClientHello, and the server responds — i.e. the
-SSLRequest + TLS-over-socket + PG-over-TLS wiring is right.
+## Flow
+`connect` -> **SSLRequest** -> server `S` -> **`tls_handshake`** (P-256 *or* x25519
+ECDHE, AES-128-GCM, **Ed25519 CertificateVerify**, optional pinning) -> Postgres
+startup + `SELECT` carried over `tls_send`/`tls_recv`.
 
-It does **not** complete the handshake against default Postgres, for one concrete
-reason: **Postgres mandates a classic ECDH curve (default `prime256v1` / P-256)** and
-refuses `ssl_ecdh_curve='X25519'` (the server won't even start). This client offers
-only x25519, so there is no common group -> the server sends a `handshake_failure`
-alert. This is the same wall as talking to the open internet.
+## Verified
+Against real PostgreSQL 16 with `ssl=on` (default `ssl_ecdh_curve=prime256v1`, Ed25519
+server cert), on x86-64 AND aarch64 (qemu):
+```
+TLS established to postgres (cert verified)
+postgres authenticated
+query over TLS -> pgtls-ok
+```
+`./test.sh` (+ `ARCH=arm64`) stands up the TLS Postgres and runs it.
 
-### The unlock: NIST P-256 ECDHE
-Implementing P-256 ECDHE in `std/tls.oh` (and ECDSA-P256 / RSA for cert verification)
-is the prerequisite for interoperating with Postgres and real-world TLS servers. That
-is a from-scratch P-256 field + curve implementation (comparable in size to X25519),
-the clearly-scoped next step. With it, this client completes unchanged.
+## What made it work
+Postgres mandates a classic ECDH curve (P-256). The TLS client now offers **both**
+P-256 and x25519 groups (std/p256.oh provides P-256 ECDHE) and uses whichever the
+server selects, so it interoperates with Postgres and other P-256-only servers.
 
-The TLS layer itself (handshake, records, cert verify, pinning, app I/O) and the
-Postgres layer are both independently verified — only the ECDHE group is the gap.
+## Security
+Server is authenticated (Ed25519 CertificateVerify; forged sigs rejected). Trust
+anchoring = pinning (load_pin) for known servers. Remaining for arbitrary CAs:
+ECDSA-P256/RSA cert signatures + X.509 chain validation. Auth here is trust (Postgres
+SCRAM-over-TLS is a further compose of std/scram with this channel).
